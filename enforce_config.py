@@ -56,6 +56,29 @@ def enforce_config():
              config["browser"] = browser
              modified = True
 
+        # Enforce Dynamic Model Selection with Fallback
+        agents = config.get("agents", {})
+        defaults = agents.get("defaults", {})
+        model_config = defaults.get("model", {})
+        
+        # Use gemini-3-flash as primary (higher quota limits than gemini-3-pro-low)
+        if model_config.get("primary") != "google-antigravity/gemini-3-flash":
+            print("🔄 Switching to gemini-3-flash (higher quota limits)...")
+            model_config["primary"] = "google-antigravity/gemini-3-flash"
+            defaults["model"] = model_config
+            
+            # Ensure all models are registered
+            models = defaults.get("models", {})
+            for model_name in ["google-antigravity/gemini-3-pro-low", 
+                             "google-antigravity/gemini-3-flash",
+                             "google-antigravity/claude-opus-4-6-thinking"]:
+                if model_name not in models:
+                    models[model_name] = {}
+            defaults["models"] = models
+            agents["defaults"] = defaults
+            config["agents"] = agents
+            modified = True
+
         if modified:
             with open(config_path, "w") as f:
                 json.dump(config, f, indent=2)

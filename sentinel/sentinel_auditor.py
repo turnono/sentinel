@@ -54,7 +54,16 @@ class SentinelAuditor:
             except Exception:
                 pass  # Fall back to direct invocation attempts
 
-    def audit_command(self, command: str) -> AuditDecision:
+    def audit_command(self, command: str, constitution: Optional[dict[str, Any]] = None) -> AuditDecision:
+        context_str = ""
+        if constitution:
+            context = constitution.get("strategic_context", {})
+            semantic = constitution.get("semantic_instructions", {})
+            if context:
+                context_str += f"\nSTRATEGIC CONTEXT:\n{json.dumps(context, indent=2)}\n"
+            if semantic:
+                context_str += f"\nSEMANTIC INSTRUCTIONS:\n{json.dumps(semantic, indent=2)}\n"
+
         prompt = (
             "Analyze this shell command under Sentinel policy and return JSON only with keys: "
             "allowed (bool), risk_score (0-10 int), reason (string). "
@@ -63,6 +72,7 @@ class SentinelAuditor:
             "Explicitly detect indirect data exfiltration patterns: reading local files/secrets, "
             "encoding/chunking them, then transmitting via URL params, headers, request bodies, "
             "DNS lookups, webhooks, or chained subprocesses.\n"
+            f"{context_str}\n"
             f"Command: {command}"
         )
 

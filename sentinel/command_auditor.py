@@ -43,7 +43,7 @@ class CommandAuditor:
         if self.llm_auditor is None:
             return AuditDecision.reject("LLM auditor unavailable; fail-closed policy applied.", risk_score=9)
 
-        return self.llm_auditor.audit_command(normalized_command)
+        return self.llm_auditor.audit_command(normalized_command, constitution=self.constitution)
 
     def _hard_kill_filter(self, command: str) -> Optional[AuditDecision]:
         if not command.strip():
