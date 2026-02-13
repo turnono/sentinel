@@ -1,3 +1,4 @@
+
 # Python
 __pycache__/
 *.pyc
@@ -43,3 +44,5 @@ htmlcov/
 # Build
 dist/
 build/
+
+Sentinel-Constitution.yaml

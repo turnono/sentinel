@@ -1,3 +1,25 @@
+strategic_context:
+  mission: "Executive Mobility Partner for Taajirah Systems"
+  project_paths:
+    - "/Users/<user>/Library/CloudStorage/GoogleDrive-user@example.com/My Drive"
+    - "/Users/<user>/Documents/Sentinel"
+    - "/Users/<user>/.openclaw/workspace"
+  approved_activities:
+    - "Managing insurance and logistics documents for Taajirah Systems"
+    - "Creating and verifying project folders on Google Drive"
+    - "Performing security audits and configuration management"
+    - "Managing OpenClaw workspace internal files (e.g., BOOTSTRAP.md)"
+
+semantic_instructions:
+  allow_patterns:
+    - "Listing or searching within the 'Taajirah Systems' Drive folder for project assets"
+    - "Moving files between local project directories and the approved Drive paths"
+    - "Checking file existence and lists for verification purposes (even if piped to /dev/null)"
+    - "Deleting or updating internal metadata files in .openclaw/workspace"
+  caution_patterns:
+    - "Scanning the entire root of Google Drive for unrelated files"
+    - "Encoding large volumes of Drive data into non-readable formats"
+
 hard_kill:
   blocked_strings:
     - sudo
@@ -36,6 +58,14 @@ execution_mode:
     - npm
     - ng
     - node
+    - adk
+    - bash
+    - sh
+    - cat
+    - tail
+    - grep
+    - ps
+    - kill
 
 agent_policies:
   openclaw_supervisor:

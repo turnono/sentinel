@@ -56,14 +56,29 @@ def enforce_config():
              config["browser"] = browser
              modified = True
 
+        # Remove stale 'my-chrome' profile if present
+        if "my-chrome" in browser.get("profiles", {}):
+            print("🧹 Removing stale 'my-chrome' profile...")
+            del browser["profiles"]["my-chrome"]
+            modified = True
+
         # Enforce Dynamic Model Selection with Fallback
         agents = config.get("agents", {})
         defaults = agents.get("defaults", {})
         model_config = defaults.get("model", {})
         
         # Use gemini-3-flash as primary (higher quota limits than gemini-3-pro-low)
-        if model_config.get("primary") != "google-antigravity/gemini-3-flash":
-            print("🔄 Switching to gemini-3-flash (higher quota limits)...")
+        valid_models = [
+            "google-antigravity/gemini-3-flash",
+            "google-antigravity/gemini-3-pro-low", 
+            "google-antigravity/claude-opus-4-6-thinking"
+        ]
+        
+        # Default to gemini-3-flash if current is invalid
+        # But allow custom/local models (not starting with google-antigravity)
+        current_primary = model_config.get("primary", "")
+        if current_primary.startswith("google-antigravity/") and current_primary not in valid_models:
+            print("🔄 Switching to gemini-3-flash (default fallback)...")
             model_config["primary"] = "google-antigravity/gemini-3-flash"
             defaults["model"] = model_config
             
