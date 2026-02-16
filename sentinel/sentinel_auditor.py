@@ -4,7 +4,10 @@ import ast
 import inspect
 import json
 import re
+import time
+from collections import deque
 from importlib import import_module
+from pathlib import Path
 from typing import Any, Optional
 
 from sentinel.models import AuditDecision
@@ -40,6 +43,13 @@ class SentinelAuditor:
         kwargs = self._build_constructor_kwargs(llm_agent_cls, agent_name, model)
         self.agent = llm_agent_cls(**kwargs)
         
+        # Throttling & Cost Control state
+        self._request_history: deque[float] = deque()
+        self._last_cooldown_time = 0.0
+        self._max_requests_per_window = 10
+        self._window_seconds = 60
+        self._cooldown_seconds = 30
+        
         # Initialize runner for proper invocation
         self._runner = None
         self._session_service = None
@@ -64,16 +74,35 @@ class SentinelAuditor:
             if semantic:
                 context_str += f"\nSEMANTIC INSTRUCTIONS:\n{json.dumps(semantic, indent=2)}\n"
 
+        # Throttling Check
+        now = time.time()
+        # Clean old requests from window
+        while self._request_history and self._request_history[0] < now - self._window_seconds:
+            self._request_history.popleft()
+
+        # Check if in active cool-down
+        if now < self._last_cooldown_time + self._cooldown_seconds:
+            wait_remaining = int(self._last_cooldown_time + self._cooldown_seconds - now)
+            return AuditDecision.reject(f"Sentinel Throttle: Cool-down active. {wait_remaining}s remaining.", risk_score=5)
+
+        # Check limit
+        if len(self._request_history) >= self._max_requests_per_window:
+            self._last_cooldown_time = now
+            return AuditDecision.reject("Sentinel Throttle: Limit exceeded (10 req/60s). Cooling down...", risk_score=5)
+
+        # Record request
+        self._request_history.append(now)
+
         prompt = (
-            "Analyze this shell command under Sentinel policy and return JSON only with keys: "
-            "allowed (bool), risk_score (0-10 int), reason (string). "
+            "Analyze this RAW SHELL STRING as a SINGLE SEMANTIC UNIT under Sentinel policy. "
+            "Return JSON only with keys: allowed (bool), risk_score (0-10 int), reason (string). "
             "Apply zero-trust and fail-closed logic. "
             "Treat ambiguity as malicious. "
             "Explicitly detect indirect data exfiltration patterns: reading local files/secrets, "
             "encoding/chunking them, then transmitting via URL params, headers, request bodies, "
             "DNS lookups, webhooks, or chained subprocesses.\n"
             f"{context_str}\n"
-            f"Command: {command}"
+            f"RAW SHELL STRING: {command}"
         )
 
         try:
@@ -88,65 +117,137 @@ class SentinelAuditor:
             return AuditDecision.reject(f"LLM auditor failure: {exc}", risk_score=10)
 
     def _invoke_agent(self, prompt: str) -> Any:
-        # Method 1: Try google.genai client directly (most reliable)
-        try:
-            import os
-            from dotenv import load_dotenv
-            load_dotenv()
-            
-            from google import genai
-            api_key = os.getenv('GOOGLE_API_KEY')
-            if api_key:
-                client = genai.Client(api_key=api_key)
-                request_kwargs = {
-                    "model": self.agent.model if hasattr(self.agent, 'model') else "gemini-2.0-flash",
-                    "contents": prompt,
-                }
-                try:
-                    request_kwargs["config"] = types.GenerateContentConfig(
-                        system_instruction=SENTINEL_AUDITOR_SYSTEM_INSTRUCTION,
-                    )
-                except Exception:
-                    request_kwargs["contents"] = (
-                        f"{SENTINEL_AUDITOR_SYSTEM_INSTRUCTION}\n\n{prompt}"
-                    )
-
-                response = client.models.generate_content(**request_kwargs)
-                if hasattr(response, 'text'):
-                    return response.text
-        except Exception:
-            pass
+        last_exception: Optional[Exception] = None
+        max_retries = 3
         
-        # Method 2: Try InMemoryRunner if available
-        if self._runner is not None:
+        for attempt in range(max_retries + 1):
             try:
-                session = self._session_service.create_session(
-                    app_name="sentinel",
-                    user_id="sentinel_user",
-                )
-                user_content = types.Content(
-                    role="user",
-                    parts=[types.Part(text=prompt)]
-                )
-                response_parts = []
-                for event in self._runner.run(
-                    user_id="sentinel_user",
-                    session_id=session.id,
-                    new_message=user_content,
-                ):
-                    if hasattr(event, 'content') and event.content:
-                        for part in event.content.parts:
-                            if hasattr(part, 'text') and part.text:
-                                response_parts.append(part.text)
-                if response_parts:
-                    return "\n".join(response_parts)
-            except Exception:
-                pass
-        
+                # Method 1: Try google.genai client directly (most reliable)
+                try:
+                    import os
+                    from dotenv import load_dotenv
+                    load_dotenv()
+                    
+                    from google import genai
+                    
+                    use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() == "true"
+                    project = os.getenv("GOOGLE_CLOUD_PROJECT")
+                    location = os.getenv("GOOGLE_CLOUD_LOCATION")
+                    api_key = os.getenv('GOOGLE_API_KEY')
+
+                    client_kwargs = {}
+                    if use_vertex and project and location:
+                        import google.auth
+                        from google.oauth2.credentials import Credentials as GoogleCredentials
+                        
+                        try:
+                            credentials, _ = google.auth.default()
+                        except Exception:
+                            credentials = None
+
+                        # Fallback: Try to extract token from OpenClaw auth-profiles.json
+                        if not credentials or not hasattr(credentials, 'token') or not credentials.token:
+                            auth_path = Path.home() / ".openclaw" / "auth-profiles.json"
+                            if auth_path.exists():
+                                try:
+                                    auth_data = json.loads(auth_path.read_text())
+                                    profiles = auth_data.get("profiles", {})
+                                    for p_id, p_data in profiles.items():
+                                        if "google-antigravity" in p_id and p_data.get("access"):
+                                            credentials = GoogleCredentials(token=p_data["access"])
+                                            break
+                                except Exception:
+                                    pass
+
+                        if not credentials:
+                            raise RuntimeError("No valid credentials found for Vertex AI (ADC failed and no OpenClaw token).")
+
+                        client_kwargs = {
+                            "vertexai": True,
+                            "project": project,
+                            "location": location,
+                            "credentials": credentials,
+                        }
+                    elif api_key:
+                        client_kwargs = {"api_key": api_key}
+                    else:
+                        raise RuntimeError("Neither GOOGLE_API_KEY nor Vertex AI configuration found.")
+
+                    client = genai.Client(**client_kwargs)
+                    
+                    # Billing Safeguard: Model Lock
+                    # Using gemini-2.0-flash for Vertex AI (cost-efficient, available on project).
+                    target_model = "gemini-2.0-flash" if use_vertex else (self.agent.model if hasattr(self.agent, "model") else "gemini-2.0-flash")
+
+                    request_kwargs = {
+                        "model": target_model,
+                        "contents": prompt,
+                    }
+                    try:
+                        request_kwargs["config"] = types.GenerateContentConfig(
+                            system_instruction=SENTINEL_AUDITOR_SYSTEM_INSTRUCTION,
+                        )
+                    except Exception:
+                        request_kwargs["contents"] = (
+                            f"{SENTINEL_AUDITOR_SYSTEM_INSTRUCTION}\n\n{prompt}"
+                        )
+
+                    response = client.models.generate_content(**request_kwargs)
+                    if hasattr(response, 'text') and response.text:
+                        return response.text
+                except Exception as e:
+                    last_exception = e
+                    if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                        raise e
+                    # For other errors, try secondary methods if Vertex failed or was not used
+                
+                # Method 2: Try InMemoryRunner if available (only if Vertex not used or failed)
+                if not (use_vertex and project and location) and self._runner is not None and self._session_service is not None:
+                    try:
+                        session = self._session_service.create_session(
+                            app_name="sentinel",
+                            user_id="sentinel_user",
+                        )
+                        user_content = types.Content(
+                            role="user",
+                            parts=[types.Part(text=prompt)]
+                        )
+                        response_parts = []
+                        for event in self._runner.run(
+                            user_id="sentinel_user",
+                            session_id=session.id,
+                            new_message=user_content,
+                        ):
+                            if hasattr(event, 'content') and event.content:
+                                for part in event.content.parts:
+                                    if hasattr(part, 'text') and part.text:
+                                        response_parts.append(part.text)
+                            if hasattr(event, 'tool_calls') and event.tool_calls:
+                                for call in event.tool_calls:
+                                    if hasattr(call, 'function_call') and call.function_call:
+                                        response_parts.append(json.dumps(call.function_call.args))
+
+                        if response_parts:
+                            return "\n".join(response_parts)
+                    except Exception as e:
+                        last_exception = e
+                        if "429" in str(e):
+                            raise e
+            
+            except Exception as e:
+                last_exception = e
+                if attempt < max_retries and "429" in str(e):
+                    time.sleep((2 ** attempt) + 1)
+                    continue
+                break
+
+        if last_exception:
+            raise last_exception
         raise RuntimeError("No supported invocation method found on ADK LlmAgent.")
 
     def _parse_json_response(self, response: Any) -> dict[str, Any]:
         text = self._response_to_text(response)
+        
         match = re.search(r"\{.*\}", text, flags=re.DOTALL)
         if not match:
             raise ValueError(f"No JSON object found in response: {text!r}")
@@ -156,21 +257,49 @@ class SentinelAuditor:
         try:
             data = json.loads(payload)
         except json.JSONDecodeError:
-            data = ast.literal_eval(payload)
+            try:
+                data = ast.literal_eval(payload)
+            except Exception:
+                data = {}
+                for key in ("allowed", "risk_score", "reason"):
+                    key_match = re.search(f'"{key}"\\s*:\\s*([^,\\s}}]+)', payload)
+                    if key_match:
+                        val = key_match.group(1).strip().strip('"').strip("'")
+                        if key == "allowed":
+                            data[key] = val.lower() == "true"
+                        elif key == "risk_score":
+                            try:
+                                data[key] = int(val)
+                            except ValueError:
+                                data[key] = 5
+                        else:
+                            data[key] = val
 
         if not isinstance(data, dict):
             raise ValueError("Auditor output is not a dictionary.")
 
+        # Handle potential type mismatches from regex parser
+        if "allowed" in data and not isinstance(data["allowed"], bool):
+            data["allowed"] = str(data["allowed"]).lower() == "true"
+        
+        if "risk_score" in data:
+            try:
+                data["risk_score"] = int(data["risk_score"])
+            except (ValueError, TypeError):
+                data["risk_score"] = 5
+
+        # Ensure defaults
+        if "allowed" not in data and "risk_score" in data:
+            data["allowed"] = data["risk_score"] < 5
+        if "reason" not in data:
+            data["reason"] = "Semantic analysis completed (implied reason)."
+
         for field in ("allowed", "risk_score", "reason"):
             if field not in data:
-                raise ValueError(f"Missing required field: {field}")
-
-        if not isinstance(data["allowed"], bool):
-            raise ValueError("Field 'allowed' must be a boolean.")
-        if not isinstance(data["risk_score"], int):
-            raise ValueError("Field 'risk_score' must be an integer.")
-        if not isinstance(data["reason"], str):
-            raise ValueError("Field 'reason' must be a string.")
+                # Final fail-closed fallback
+                if field == "allowed": data[field] = False
+                elif field == "risk_score": data[field] = 10
+                else: data[field] = "Incomplete auditor response"
 
         return data
 

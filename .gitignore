@@ -19,6 +19,7 @@ ENV/
 .env
 .env.local
 .env.*.local
+.credentials/
 
 # IDE
 .idea/

@@ -42,6 +42,8 @@ network_lock:
     - wget
   whitelisted_domains:
     - api.openclaw.example
+    - googleapis.com
+    - accounts.google.com
 
 execution_mode:
   lockdown_mode: false

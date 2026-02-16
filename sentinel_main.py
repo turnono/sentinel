@@ -153,19 +153,28 @@ class SentinelRuntime:
             _log_audit_event(cmd_string, payload)
             return payload
 
-        try:
-            cmd_args = shlex.split(cmd_string, posix=True)
-        except ValueError as exc:
-            failed = AuditDecision.reject(f"Command parsing failed: {exc}", risk_score=10)
-            payload = failed.to_dict()
-            payload.update({"returncode": None, "stdout": "", "stderr": ""})
-            _log_audit_event(cmd_string, payload)
-            return payload
+        # Shell Execution Patch: Detect shell operators (| , > , &&)
+        # If present, use shell=True and pass the full string.
+        # Otherwise, keep the safer shell=False with shlex.split.
+        shell_operators = {"|", ">", "&&", ";", "<<", ">>"}
+        use_shell = any(op in cmd_string for op in shell_operators)
+
+        if use_shell:
+            cmd_args = cmd_string
+        else:
+            try:
+                cmd_args = shlex.split(cmd_string, posix=True)
+            except ValueError as exc:
+                failed = AuditDecision.reject(f"Command parsing failed: {exc}", risk_score=10)
+                payload = failed.to_dict()
+                payload.update({"returncode": None, "stdout": "", "stderr": ""})
+                _log_audit_event(cmd_string, payload)
+                return payload
 
         try:
             completed = subprocess.run(
                 cmd_args,
-                shell=False,
+                shell=use_shell,
                 check=False,
                 capture_output=True,
                 text=True,
