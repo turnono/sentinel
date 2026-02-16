@@ -91,6 +91,97 @@ def enforce_config():
             defaults["models"] = models
             agents["defaults"] = defaults
             config["agents"] = agents
+            defaults["models"] = models
+            agents["defaults"] = defaults
+            config["agents"] = agents
+            modified = True
+
+        # Enforce Specialized Agents
+        agents_list = agents.get("list", [])
+        agent_ids = {a["id"] for a in agents_list}
+        
+        # Helper to create identity file
+        def ensure_identity(agent_id, prompt):
+            agent_dir = Path.home() / ".openclaw" / "agents" / agent_id / "agent"
+            agent_dir.mkdir(parents=True, exist_ok=True)
+            identity_file = agent_dir / "IDENTITY.md"
+            if not identity_file.exists():
+                print(f"🆔 Creating identity for {agent_id}...")
+                with open(identity_file, "w") as f:
+                    f.write(prompt)
+
+        if "architect" not in agent_ids:
+            print("🏗️  Adding Architect agent...")
+            agents_list.append({
+                "id": "architect",
+                "name": "Architect",
+                "model": "google-antigravity/claude-opus-4-6-thinking"
+            })
+            modified = True
+        
+        ensure_identity("architect", "You are the System Architect. You think deeply about system design, security implications, and long-term strategy.")
+            
+        if "sentinel" not in agent_ids:
+             print("🛡️  Adding Sentinel agent...")
+             agents_list.append({
+                "id": "sentinel",
+                "name": "Sentinel",
+                "model": "google-antigravity/gemini-3-pro-low"
+             })
+             modified = True
+        
+        # SANITIZATION: Remove 'prompt' keys if they exist (invalid in JSON)
+        for agent in agents_list:
+            if "prompt" in agent:
+                print(f"🧹 Removing invalid 'prompt' key from agent {agent.get('id')}...")
+                del agent["prompt"]
+                modified = True
+
+        ensure_identity("sentinel", "You are Sentinel, the security guardian. Your primary role is to audit system state and enforce safety protocols using the 'sentinel' skill.")
+
+        agents["list"] = agents_list
+        config["agents"] = agents
+
+        # Enforce Extra Skills Directory
+        skills = config.get("skills", {})
+        load_conf = skills.get("load", {})
+        extra_dirs = load_conf.get("extraDirs", [])
+        sentinel_skill_path = "/Users/<USER>/sentinel/openclaw-skill"
+        
+        if sentinel_skill_path not in extra_dirs:
+            print("➕ Registering Sentinel skill directory...")
+            extra_dirs.append(sentinel_skill_path)
+            load_conf["extraDirs"] = extra_dirs
+            skills["load"] = load_conf
+            config["skills"] = skills
+            modified = True
+
+        # Enforce Voice-Call Plugin (Mock Provider)
+        plugins = config.get("plugins", {}).get("entries", {})
+        if "voice-call" not in plugins:
+            print("📞 Adding Voice-Call plugin (Mock)...")
+            plugins["voice-call"] = {
+                "enabled": True,
+                "config": {
+                    "provider": "mock",
+                    "fromNumber": "+15550001234",
+                    "toNumber": "+15550005678",
+                    "outbound": {
+                        "defaultMode": "notify"
+                    }
+                }
+            }
+            config["plugins"]["entries"] = plugins
+            modified = True
+
+        # Enforce Voice-Call Skill
+        skills_entries = config.get("skills", {}).get("entries", {})
+        if "voice-call" not in skills_entries:
+            print("📞 Enabling Voice-Call skill...")
+            skills_entries["voice-call"] = {
+                "enabled": True
+            }
+            config["skills"]["entries"] = skills_entries
             modified = True
 
         if modified:
