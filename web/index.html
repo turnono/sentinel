@@ -1,38 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel Dashboard</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/web/style.css">
 </head>
+
 <body>
     <div class="container">
         <header>
-            <h1>🛡️ Sentinel Dashboard</h1>
+            <div class="logo-area">
+                <h1>🛡️ Sentinel</h1>
+                <span class="badge">v2.0</span>
+            </div>
             <div id="status-panel" class="status-panel">
-                Status: <span id="server-status">Connecting...</span>
+                <span class="status-indicator"></span>
+                <span id="server-status">Connecting...</span>
             </div>
         </header>
 
         <main>
-            <section id="pending-section">
-                <h2>⏳ Pending Approvals</h2>
-                <div id="pending-list" class="card-list">
-                    <!-- Pending items will be injected here -->
-                    <p class="empty-state">No pending approvals.</p>
-                </div>
-            </section>
+            <div class="grid">
+                <section id="pending-section" class="panel">
+                    <h2>⏳ Pending Approvals</h2>
+                    <div id="pending-list" class="card-list">
+                        <!-- Pending items will be injected here -->
+                        <div class="loading-spinner"></div>
+                    </div>
+                </section>
 
-            <section id="activity-section">
-                <h2>📝 Recent Activity</h2>
-                <div id="audit-list" class="log-list">
-                    <!-- Audit logs will be injected here -->
-                    <p class="empty-state">No recent activity.</p>
-                </div>
-            </section>
+                <section id="activity-section" class="panel">
+                    <h2>📝 Recent Activity</h2>
+                    <div id="audit-list" class="log-list">
+                        <!-- Audit logs will be injected here -->
+                        <div class="loading-spinner"></div>
+                    </div>
+                </section>
+            </div>
         </main>
     </div>
-    <script src="app.js"></script>
+    <script src="/web/app.js"></script>
 </body>
+
 </html>
