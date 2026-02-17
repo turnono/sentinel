@@ -137,8 +137,37 @@ def enforce_config():
                 del agent["prompt"]
                 modified = True
 
-        ensure_identity("sentinel", "You are Sentinel, the security guardian. Your primary role is to audit system state and enforce safety protocols using the 'sentinel' skill.")
+        # Enforce Agents Defaults Models
+        models = defaults.get("models", {})
+        morpheus_models = ["morpheus/glm-5", "morpheus/kimi-k2.5", "morpheus/hermes-4-14b"]
+        for m in morpheus_models:
+            if m not in models:
+                models[m] = {}
+                modified = True
+        
+        # Enforce Morpheus Provider Schema
+        if "models" not in config: config["models"] = {}
+        models_block = config["models"]
+        models_block["mode"] = "merge"
+        
+        providers = models_block.get("providers", {})
+        if "morpheus" not in providers or "baseURL" in providers["morpheus"]:
+            print("♾️  Hardening Morpheus Decentralized Provider...")
+            providers["morpheus"] = {
+                "baseUrl": "http://127.0.0.1:3334/v1",
+                "apiKey": "morpheus-community-key",
+                "api": "openai-completions",
+                "models": [
+                    {"id": "glm-5", "name": "GLM-5"},
+                    {"id": "kimi-k2.5", "name": "Kimi K2.5"},
+                    {"id": "hermes-4-14b", "name": "Hermes 4 14B"}
+                ]
+            }
+            models_block["providers"] = providers
+            config["models"] = models_block
+            modified = True
 
+        ensure_identity("sentinel", "You are Sentinel, the security guardian. Your primary role is to audit system state and enforce safety protocols using the 'sentinel' skill.")
         agents["list"] = agents_list
         config["agents"] = agents
 
@@ -179,6 +208,15 @@ def enforce_config():
         if "voice-call" not in skills_entries:
             print("📞 Enabling Voice-Call skill...")
             skills_entries["voice-call"] = {
+                "enabled": True
+            }
+            config["skills"]["entries"] = skills_entries
+            modified = True
+
+        # Enforce Code Wiki Skill
+        if "codewiki" not in skills_entries:
+            print("📖 Enabling Code Wiki skill...")
+            skills_entries["codewiki"] = {
                 "enabled": True
             }
             config["skills"]["entries"] = skills_entries

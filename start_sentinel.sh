@@ -1,5 +1,6 @@
 #!/bin/bash
-set -e
+#!/bin/bash
+
 
 echo "🛡️  Sentinel Hardened Launch Sequence Initiated..."
 
@@ -58,6 +59,19 @@ else
 fi
 
 OPENCLAW_PATH=$(which openclaw)
+if [ -z "$OPENCLAW_PATH" ]; then
+    # Fallback to common nvm location if which failed
+    OPENCLAW_PATH="$HOME/.nvm/versions/node/v22.14.0/bin/openclaw"
+fi
+
+# Final check
+if [ ! -x "$OPENCLAW_PATH" ]; then
+    echo "❌ Error: openclaw executable not found at $OPENCLAW_PATH"
+    echo "   Please ensure OpenClaw is installed and in PATH."
+    # Try one last ditch effort with system node
+    OPENCLAW_PATH="openclaw" 
+fi
+
 echo "   OpenClaw Path: $OPENCLAW_PATH"
 
 # Load env vars for OpenClaw
@@ -66,17 +80,46 @@ if [ -f .env ]; then
   echo "   Loaded .env for OpenClaw"
 fi
 
+# Managed Persistence Configuration (Exponential Backoff)
+BACKOFF_SEC=2
+MAX_BACKOFF_SEC=60
+RESET_WINDOW_SEC=300
+LAST_RESTART_TIME=$(date +%s)
+
 while true; do
-    openclaw gateway
+    CURRENT_TIME=$(date +%s)
+    ELAPSED=$((CURRENT_TIME - LAST_RESTART_TIME))
+
+    # Reset backoff if service was stable for a while
+    if [ $ELAPSED -gt $RESET_WINDOW_SEC ]; then
+        BACKOFF_SEC=2
+    fi
+
+    echo "🦞 Starting OpenClaw Gateway (Managed Persistence)..."
+    echo "   Priority: Low (nice +10) | Backoff Potential: ${BACKOFF_SEC}s"
+    
+    # Run with lower priority to prevent system freeze
+    # Log BOTH stdout and stderr to file
+    LOG_FILE="$(pwd)/logs/openclaw_gateway.log"
+    nice -n 10 "$OPENCLAW_PATH" gateway > "$LOG_FILE" 2>&1
     EXIT_CODE=$?
+    LAST_RESTART_TIME=$(date +%s)
   
     if [ -f "/tmp/openclaw_restart_requested" ]; then
         echo "🔄 Restarting OpenClaw due to Smart Model Switch..."
         rm /tmp/openclaw_restart_requested
+        BACKOFF_SEC=2 # Reset backoff on intentional restart
         sleep 2
         continue
-    else
-        break
+    fi
+
+    echo "⚠️  OpenClaw Gateway crashed (Code: $EXIT_CODE). Backing off for ${BACKOFF_SEC}s..."
+    sleep $BACKOFF_SEC
+    
+    # Exponential Backoff for next time (cap at 60s)
+    BACKOFF_SEC=$((BACKOFF_SEC * 2))
+    if [ $BACKOFF_SEC -gt $MAX_BACKOFF_SEC ]; then
+        BACKOFF_SEC=$MAX_BACKOFF_SEC
     fi
 done
 
