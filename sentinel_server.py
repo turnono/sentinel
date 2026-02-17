@@ -58,12 +58,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/web", StaticFiles(directory="web"), name="web")
-
-@app.get("/dashboard")
-async def dashboard():
-    """Serve the dashboard UI."""
-    return FileResponse("web/index.html")
+# Mount Angular Dashboard
+# Serve the browser build directory
+app.mount("/dashboard", StaticFiles(directory="web/dist/browser", html=True), name="dashboard")
 
 # Initialize the Sentinel runtime once at startup
 runtime: Optional[SentinelRuntime] = None
