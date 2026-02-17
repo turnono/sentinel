@@ -24,6 +24,7 @@ from pydantic import BaseModel
 # Import the Sentinel runtime
 from sentinel_main import SentinelRuntime
 from sentinel_approvals import ApprovalManager, PendingRequest
+from sentinel_db import SentinelDB
 
 app = FastAPI(
     title="Sentinel Security Gateway",
@@ -58,6 +59,7 @@ app.add_middleware(
 # Initialize the Sentinel runtime once at startup
 runtime: Optional[SentinelRuntime] = None
 approval_manager = ApprovalManager()
+db: Optional[SentinelDB] = None
 
 
 class AuditRequest(BaseModel):
@@ -90,8 +92,9 @@ def _verify_auth(x_sentinel_token: Optional[str]) -> None:
 @app.on_event("startup")
 async def startup_event():
     """Initialize Sentinel runtime on server startup."""
-    global runtime
+    global runtime, db
     try:
+        db = SentinelDB()
         runtime = SentinelRuntime()
         if runtime.startup_warning:
             print(f"⚠️  Sentinel warning: {runtime.startup_warning}")
@@ -145,6 +148,10 @@ def audit_command(request: AuditRequest, x_sentinel_token: Optional[str] = Heade
             )
             result["reason"] = f"{result.get('reason')} [Request ID: {req_id}]"
             print(f"⚠️  Review Required. Request ID: {req_id}")
+
+        # Log to DB
+        if db:
+            db.log_audit(request.command, result)
 
         duration_ms = (time.time() - start_time) * 1000
         print(f"⏱️  Audit completed in {duration_ms:.2f}ms. Decision: {'✅' if result['allowed'] else '❌'} ({result.get('reason', 'No reason provided')})")
