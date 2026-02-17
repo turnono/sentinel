@@ -95,6 +95,8 @@ requires:
     - google-adk
     - pyyaml
     - python-dotenv
+    - requests
+    - beautifulsoup4
 
 # Security notes
 security:
