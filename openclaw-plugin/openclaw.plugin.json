@@ -2,6 +2,7 @@
   "id": "sentinel",
   "name": "Sentinel Security Gateway",
   "version": "2.0.0",
+  "ui_view": "http://localhost:8765/dashboard",
   "description": "Security gateway that intercepts and audits shell commands before execution",
   "homepage": "https://github.com/turnono/sentinel",
   "entry": "index.ts",

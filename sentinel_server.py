@@ -19,6 +19,8 @@ from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # Import the Sentinel runtime
@@ -55,6 +57,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.mount("/web", StaticFiles(directory="web"), name="web")
+
+@app.get("/dashboard")
+async def dashboard():
+    """Serve the dashboard UI."""
+    return FileResponse("web/index.html")
 
 # Initialize the Sentinel runtime once at startup
 runtime: Optional[SentinelRuntime] = None

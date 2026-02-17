@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🛡️ Sentinel Dashboard</h1>
+            <div id="status-panel" class="status-panel">
+                Status: <span id="server-status">Connecting...</span>
+            </div>
+        </header>
+
+        <main>
+            <section id="pending-section">
+                <h2>⏳ Pending Approvals</h2>
+                <div id="pending-list" class="card-list">
+                    <!-- Pending items will be injected here -->
+                    <p class="empty-state">No pending approvals.</p>
+                </div>
+            </section>
+
+            <section id="activity-section">
+                <h2>📝 Recent Activity</h2>
+                <div id="audit-list" class="log-list">
+                    <!-- Audit logs will be injected here -->
+                    <p class="empty-state">No recent activity.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
