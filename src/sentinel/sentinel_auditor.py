@@ -10,7 +10,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Optional
 
-from sentinel.models import AuditDecision
+from .models import AuditDecision
 
 # ADK imports for runner-based invocation
 try:

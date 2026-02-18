@@ -24,9 +24,9 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # Import the Sentinel runtime
-from sentinel_main import SentinelRuntime
-from sentinel_approvals import ApprovalManager, PendingRequest
-from sentinel_db import SentinelDB
+from src.sentinel.main import SentinelRuntime
+from src.sentinel.approvals import ApprovalManager, PendingRequest
+from src.sentinel.db import SentinelDB
 
 app = FastAPI(
     title="Sentinel Security Gateway",

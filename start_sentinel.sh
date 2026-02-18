@@ -10,6 +10,9 @@ if [ -f .env ]; then
   echo "   Loaded .env variables"
 fi
 
+# Set PYTHONPATH to include the project root for modular imports
+export PYTHONPATH=$PYTHONPATH:.
+
 # 1. Enforce Configuration
 echo "🔒 Locking OpenClaw configuration..."
 python3 enforce_config.py
@@ -33,19 +36,19 @@ sleep 2
 # 3. Start Sentinel Server (Background)
 echo "🧠 Starting Sentinel Brain..."
 source .venv/bin/activate
-python -u sentinel_server.py > /tmp/sentinel.log 2>&1 &
+python -u src/api/server.py > /tmp/sentinel.log 2>&1 &
 SERVER_PID=$!
 echo "   Sentinel Server PID: $SERVER_PID"
 
 # 4. Start Context Monitor (Background)
 echo "👀 Starting Context Monitor..."
-python -u context_monitor.py > /tmp/context_monitor.log 2>&1 &
+python -u scripts/monitoring/context.py > /tmp/context_monitor.log 2>&1 &
 MONITOR_PID=$!
 echo "   Context Monitor PID: $MONITOR_PID"
 
 # 4a. Start Model Monitor (Background)
 echo "🧠 Starting Model Monitor (Smart Fallback)..."
-python -u model_monitor.py > /tmp/model_monitor.log 2>&1 &
+python -u scripts/monitoring/failover.py > /tmp/model_monitor.log 2>&1 &
 MONITOR_MODEL_PID=$!
 echo "   Model Monitor PID: $MONITOR_MODEL_PID"
 

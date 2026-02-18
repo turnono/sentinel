@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Optional
 from urllib.parse import urlparse
 
-from sentinel.models import AuditDecision
-from sentinel.sentinel_auditor import SentinelAuditor
+from .models import AuditDecision
+from .sentinel_auditor import SentinelAuditor
 
 ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
 

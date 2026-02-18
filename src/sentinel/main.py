@@ -10,10 +10,10 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Optional
 
-from sentinel import CommandAuditor, SentinelAuditor
-from sentinel import CommandAuditor, SentinelAuditor
-from sentinel.models import AuditDecision
-from sentinel_policy import PolicyEnforcer
+from .command_auditor import CommandAuditor
+from .sentinel_auditor import SentinelAuditor
+from .models import AuditDecision
+from .policy import PolicyEnforcer
 
 try:
     import yaml

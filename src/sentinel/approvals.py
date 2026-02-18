@@ -18,7 +18,7 @@ class PendingRequest(BaseModel):
 class ApprovalManager:
     def __init__(self, db_path: str = "data/sentinel.db"):
         # Import inside to avoid circular dependency
-        from sentinel_db import SentinelDB
+        from .db import SentinelDB
         self.db = SentinelDB(db_path)
 
     def create_request(self, command: str, rule_name: str, reason: str) -> str:

@@ -249,6 +249,9 @@ def enforce_config():
             config["skills"]["entries"] = skills_entries
             modified = True
 
+        # Custom Telegram configuration is managed manually in openclaw.json
+        pass
+
         if modified:
             with open(config_path, "w") as f:
                 json.dump(config, f, indent=2)

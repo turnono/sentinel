@@ -4,7 +4,7 @@ import json
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from sentinel_approvals import PendingRequest
+from .approvals import PendingRequest
 
 class SentinelDB:
     def __init__(self, db_path: str = "data/sentinel.db"):
