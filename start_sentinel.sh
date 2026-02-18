@@ -1,8 +1,14 @@
 #!/bin/bash
-#!/bin/bash
+
 
 
 echo "🛡️  Sentinel Hardened Launch Sequence Initiated..."
+
+# Load env vars early for Python scripts
+if [ -f .env ]; then
+  export $(grep -v '^#' .env | xargs)
+  echo "   Loaded .env variables"
+fi
 
 # 1. Enforce Configuration
 echo "🔒 Locking OpenClaw configuration..."
@@ -74,11 +80,7 @@ fi
 
 echo "   OpenClaw Path: $OPENCLAW_PATH"
 
-# Load env vars for OpenClaw
-if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
-  echo "   Loaded .env for OpenClaw"
-fi
+
 
 # Managed Persistence Configuration (Exponential Backoff)
 BACKOFF_SEC=2
@@ -101,7 +103,7 @@ while true; do
     # Run with lower priority to prevent system freeze
     # Log BOTH stdout and stderr to file
     LOG_FILE="$(pwd)/logs/openclaw_gateway.log"
-    nice -n 10 "$OPENCLAW_PATH" gateway > "$LOG_FILE" 2>&1
+    nice -n 10 "$OPENCLAW_PATH" gateway run > "$LOG_FILE" 2>&1
     EXIT_CODE=$?
     LAST_RESTART_TIME=$(date +%s)
   

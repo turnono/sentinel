@@ -21,7 +21,7 @@ export interface AuditLog {
     providedIn: 'root'
 })
 export class SentinelService {
-    private apiUrl = ''; // Relative path for production serve
+    private apiUrl = window.location.origin; // Absolute path to same origin
 
     constructor(private http: HttpClient) { }
 
@@ -42,11 +42,7 @@ export class SentinelService {
 
     getPendingRequests(): Observable<PendingRequest[]> {
         return this.http.get<{ [key: string]: PendingRequest }>(`${this.apiUrl}/pending`, { headers: this.getHeaders() }).pipe(
-            map(data => Object.values(data)),
-            catchError(err => {
-                console.error('Fetch pending failed', err);
-                return of([]);
-            })
+            map(data => Object.values(data))
         );
     }
 

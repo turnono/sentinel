@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SentinelService, PendingRequest, AuditLog } from './sentinel.service';
 import { HttpClientModule } from '@angular/common/http';
@@ -16,11 +16,12 @@ export class AppComponent implements OnInit, OnDestroy {
   auditLogs: AuditLog[] = [];
   pollingInterval: any;
 
-  constructor(private sentinelService: SentinelService) { }
+  constructor(private sentinelService: SentinelService, private cdr: ChangeDetectorRef) { }
 
   ngOnInit() {
     this.refreshData();
-    this.pollingInterval = setInterval(() => this.refreshData(), 2000);
+    // Increase polling to 5s to reduce log spam
+    this.pollingInterval = setInterval(() => this.refreshData(), 5000);
   }
 
   ngOnDestroy() {
@@ -29,12 +30,62 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  refreshData() {
-    this.sentinelService.checkHealth().subscribe(online => this.isOnline = online);
+  authError = false;
 
-    if (this.isOnline) {
-      this.sentinelService.getPendingRequests().subscribe(reqs => this.pendingRequests = reqs);
-      this.sentinelService.getAuditLogs().subscribe(logs => this.auditLogs = logs);
+  refreshData() {
+    console.log('Refreshing data... checking health');
+    this.sentinelService.checkHealth().subscribe(online => {
+      console.log('Health check result:', online);
+      this.isOnline = online;
+
+      if (this.isOnline) {
+        console.log('System online, fetching pending requests...');
+        this.sentinelService.getPendingRequests().subscribe({
+          next: (reqs) => {
+            console.log('Pending requests fetched:', reqs);
+            this.pendingRequests = reqs;
+            this.authError = false;
+            this.cdr.detectChanges(); // Force UI update
+          },
+          error: (err) => {
+            console.error('Error fetching pending requests:', err);
+            this.handleAuthError(err);
+            this.cdr.detectChanges();
+          }
+        });
+
+        if (!this.authError) {
+          this.sentinelService.getAuditLogs().subscribe(logs => {
+            this.auditLogs = logs;
+            this.cdr.detectChanges();
+          });
+        }
+      } else {
+        console.warn('System reported offline');
+      }
+      this.cdr.detectChanges(); // Force UI update for online status
+    });
+  }
+
+  handleAuthError(err: any) {
+    if (err.status === 401) {
+      this.authError = true;
+      // Only prompt if we haven't given up (simple logic: if we just loaded, prompt. If it fails, show button)
+      if (!sessionStorage.getItem('auth_prompt_shown')) {
+        sessionStorage.setItem('auth_prompt_shown', 'true');
+        setTimeout(() => this.promptForToken(), 100);
+      }
+    } else {
+      console.error("API Error:", err);
+    }
+  }
+
+  promptForToken() {
+    const token = prompt("Enter Sentinel Auth Token (check .env):")?.trim();
+    if (token) {
+      localStorage.setItem('sentinel_token', token);
+      this.authError = false;
+      this.refreshData();
     }
   }
 

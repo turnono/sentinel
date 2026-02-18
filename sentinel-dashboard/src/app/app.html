@@ -5,6 +5,7 @@
       <span class="badge">v2.0</span>
     </div>
     <div class="status-panel">
+      <button *ngIf="authError" (click)="promptForToken()" class="btn-login">Login Required</button>
       <span class="status-indicator" [class.online]="isOnline" [class.offline]="!isOnline"></span>
       <span id="server-status">{{ isOnline ? 'System Online' : 'Connecting...' }}</span>
     </div>

@@ -207,6 +207,18 @@ button:hover {
     border-color: #ff7b72;
 }
 
+.btn-login {
+    background: var(--warning);
+    border-color: var(--warning);
+    color: #0f1115;
+    /* Dark text for contrast */
+    margin-right: 0.5rem;
+}
+
+.btn-login:hover {
+    background: #eac54f;
+}
+
 /* Logs */
 .log-item {
     display: flex;
