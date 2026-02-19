@@ -19,15 +19,11 @@ def enforce_config():
 
         modified = False
 
-        # Enforce Sentinel Plugin Enabled
+        # Enforce Sentinel Plugin - DISABLED (Sentinel is now a Skill)
         plugins = config.get("plugins", {}).get("entries", {})
-        if "sentinel" not in plugins:
-            plugins["sentinel"] = {}
-        
-        sentinel_config = plugins["sentinel"]
-        if not sentinel_config.get("enabled", False):
-            print("🛡️  Enabling Sentinel plugin...")
-            sentinel_config["enabled"] = True
+        if "sentinel" in plugins:
+            print("🛡️  Removing legacy Sentinel plugin entry...")
+            del plugins["sentinel"]
             modified = True
 
         # Enforce Deny Exec Tool
@@ -55,6 +51,23 @@ def enforce_config():
              browser["defaultProfile"] = "openclaw"
              config["browser"] = browser
              modified = True
+
+        # Gateway 'bind' is sensitive in recent versions. 
+        # We will let OpenClaw manage this or keep loopback as default if needed.
+        # Removing enforcement to avoid crashes.
+        
+        # Enforce Password Auth and remove invalid bind
+        gateway = config.get("gateway", {})
+        if "bind" in gateway:
+            print("🧹 Removing invalid 'bind' key from gateway...")
+            del gateway["bind"]
+            modified = True
+            
+        auth_mode = gateway.get("auth", {}).get("mode", "token")
+        if auth_mode != "password":
+            # We keep 'token' if already configured, but ensure it's secure. 
+            # In some previous runs we wanted 'password'.
+            pass
 
         # Remove stale 'my-chrome' profile if present
         if "my-chrome" in browser.get("profiles", {}):
@@ -102,73 +115,103 @@ def enforce_config():
         
         # Helper to create identity file
         def ensure_identity(agent_id, prompt):
+            workspace_root = Path("/Users/<USER>/taajirah_systems/BOARDROOM")
             agent_dir = Path.home() / ".openclaw" / "agents" / agent_id / "agent"
             agent_dir.mkdir(parents=True, exist_ok=True)
             identity_file = agent_dir / "IDENTITY.md"
-            agent_dir = Path.home() / ".openclaw" / "agents" / agent_id / "agent"
-            agent_dir.mkdir(parents=True, exist_ok=True)
-            identity_file = agent_dir / "IDENTITY.md"
+            
+            # Also sync to workspace if it exists
+            if workspace_root.exists():
+                ws_identity = workspace_root / "IDENTITY.md"
+                if agent_id == "architect": # Architect IS the workspace identity primary
+                     with open(ws_identity, "w") as f:
+                         f.write(prompt)
+
             print(f"🆔 Updating identity for {agent_id}...")
             with open(identity_file, "w") as f:
                 f.write(prompt)
 
-        if "architect" not in agent_ids:
+        # Enforce Architect Agent
+        architect_agent = next((a for a in agents_list if a["id"] == "architect"), None)
+        if not architect_agent:
             print("🏗️  Adding Architect agent...")
-            agents_list.append({
-                "id": "architect",
-                "name": "Architect",
-                "model": "google-antigravity/claude-opus-4-6-thinking"
-            })
+            architect_agent = {"id": "architect", "name": "Architect"}
+            agents_list.append(architect_agent)
             modified = True
         
-        ensure_identity("architect", "You are the System Architect. You think deeply about system design, security implications, and long-term strategy.")
+        if architect_agent.get("model") != "google-antigravity/gemini-3-flash":
+            print("🏗️  Enforcing gemini-3-flash for Architect...")
+            architect_agent["model"] = "google-antigravity/gemini-3-flash"
+            modified = True
+        
+        # TAAJIRAH CORE: Load Sovereign Context for Architect
+        boardroom_path = Path("/Users/<USER>/taajirah_systems/BOARDROOM")
+        architect_prompt = "You are the System Architect."
+        if boardroom_path.exists():
+            soul_path = boardroom_path / "SOUL.md"
+            consensus_path = boardroom_path / "CONSENSUS.json"
             
-        if "sentinel" not in agent_ids:
+            soul_content = ""
+            if soul_path.exists():
+                with open(soul_path) as f:
+                    soul_content = f.read()
+            
+            red_lines = ""
+            if consensus_path.exists():
+                try:
+                    with open(consensus_path) as f:
+                        consensus = json.load(f)
+                        
+                        # Handle the verified dict structure: red_lines: { "description": "...", "items": [...] }
+                        red_lines_block = consensus.get("red_lines", {})
+                        if isinstance(red_lines_block, list):
+                             rules = red_lines_block
+                        else:
+                             # Try both 'items' and 'rules' keys
+                             rules = red_lines_block.get("items", []) or red_lines_block.get("rules", [])
+                             
+                        if not rules:
+                             # Try root-level governance fallback
+                             gov_block = consensus.get("governance", {}).get("red_lines", {})
+                             if isinstance(gov_block, list):
+                                 rules = gov_block
+                             else:
+                                 rules = gov_block.get("items", []) or gov_block.get("rules", [])
+                             
+                        red_lines = "\n".join([f"- {rule.get('id', 'RL')}: {rule.get('rule', 'Restricted Operation')}" for rule in rules if isinstance(rule, dict)])
+                        
+                        if red_lines:
+                            print(f"🔱 Loaded {len(rules)} Red Lines from CONSENSUS.json")
+                        else:
+                            print("⚠️  No Red Lines found in CONSENSUS.json structure.")
+                except Exception as e:
+                    print(f"❌ Failed to parse CONSENSUS.json: {e}")
+                    red_lines = ""
+            
+            architect_prompt = (
+                f"{soul_content}\n\n"
+                f"## CONSTITUTION: THE 7 RED LINES\n"
+                f"{red_lines}\n\n"
+                f"Operational Directives: You are Tājirah (OpenClaw), the Executive Mobility Partner. "
+                f"Maintain zero-trust security and uphold the 7 Red Lines at all times."
+            )
+            print("🔱 Compiled TAAJIRAH CORE identity for Architect.")
+        
+        ensure_identity("architect", architect_prompt)
+            
+        # Enforce Sentinel Agent
+        sentinel_agent = next((a for a in agents_list if a["id"] == "sentinel"), None)
+        if not sentinel_agent:
              print("🛡️  Adding Sentinel agent...")
-             agents_list.append({
-                "id": "sentinel",
-                "name": "Sentinel",
-                "model": "google-antigravity/gemini-3-pro-low"
-             })
+             sentinel_agent = {"id": "sentinel", "name": "Sentinel"}
+             agents_list.append(sentinel_agent)
              modified = True
-        
-        # SANITIZATION: Remove 'prompt' keys if they exist (invalid in JSON)
-        for agent in agents_list:
-            if "prompt" in agent:
-                print(f"🧹 Removing invalid 'prompt' key from agent {agent.get('id')}...")
-                del agent["prompt"]
-                modified = True
-
-        # Enforce Agents Defaults Models
-        models = defaults.get("models", {})
-        morpheus_models = ["morpheus/glm-5", "morpheus/kimi-k2.5", "morpheus/hermes-4-14b"]
-        for m in morpheus_models:
-            if m not in models:
-                models[m] = {}
-                modified = True
-        
-        # Enforce Morpheus Provider Schema
-        if "models" not in config: config["models"] = {}
-        models_block = config["models"]
-        models_block["mode"] = "merge"
-        
-        providers = models_block.get("providers", {})
-        if "morpheus" not in providers or "baseURL" in providers["morpheus"]:
-            print("♾️  Hardening Morpheus Decentralized Provider...")
-            providers["morpheus"] = {
-                "baseUrl": "http://127.0.0.1:3334/v1",
-                "apiKey": "morpheus-community-key",
-                "api": "openai-completions",
-                "models": [
-                    {"id": "glm-5", "name": "GLM-5"},
-                    {"id": "kimi-k2.5", "name": "Kimi K2.5"},
-                    {"id": "hermes-4-14b", "name": "Hermes 4 14B"}
-                ]
-            }
-            models_block["providers"] = providers
-            config["models"] = models_block
+             
+        if sentinel_agent.get("model") != "google-antigravity/gemini-3-flash":
+            print("🛡️  Enforcing gemini-3-flash for Sentinel...")
+            sentinel_agent["model"] = "google-antigravity/gemini-3-flash"
             modified = True
-
+        
         # Load AIEOS Identity for Sentinel
         try:
             aieos_path = Path("/Users/<USER>/sentinel/identity/sentinel.aieos.json")
@@ -202,7 +245,7 @@ def enforce_config():
         skills = config.get("skills", {})
         load_conf = skills.get("load", {})
         extra_dirs = load_conf.get("extraDirs", [])
-        sentinel_skill_path = "/Users/<USER>/sentinel/openclaw-skill"
+        sentinel_skill_path = str(Path("/Users/<USER>/sentinel/openclaw-skill").resolve())
         
         if sentinel_skill_path not in extra_dirs:
             print("➕ Registering Sentinel skill directory...")
@@ -240,13 +283,10 @@ def enforce_config():
             config["skills"]["entries"] = skills_entries
             modified = True
 
-        # Enforce Code Wiki Skill
-        if "codewiki" not in skills_entries:
-            print("📖 Enabling Code Wiki skill...")
-            skills_entries["codewiki"] = {
-                "enabled": True
-            }
-            config["skills"]["entries"] = skills_entries
+        # Enforce Code Wiki Skill - DISABLED (Potential source of schema errors)
+        if "codewiki" in skills_entries:
+            print("📖 Disabling Code Wiki skill to resolve schema conflicts...")
+            del skills_entries["codewiki"]
             modified = True
 
         # Custom Telegram configuration is managed manually in openclaw.json

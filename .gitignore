@@ -47,3 +47,7 @@ dist/
 build/
 
 Sentinel-Constitution.yaml
+# Data and Databases
+data/
+*.db
+data/sentinel.db

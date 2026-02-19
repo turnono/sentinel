@@ -8,6 +8,8 @@ echo "🛡️  Sentinel Hardened Launch Sequence Initiated..."
 if [ -f .env ]; then
   export $(grep -v '^#' .env | xargs)
   echo "   Loaded .env variables"
+  echo "   Sentinel Dashboard: http://${SENTINEL_HOST}:8765/dashboard/"
+  echo "   OpenClaw Gateway:   http://<YOUR_IP>:18789/chat?session=main (Password Protected)"
 fi
 
 # Set PYTHONPATH to include the project root for modular imports
@@ -36,7 +38,7 @@ sleep 2
 # 3. Start Sentinel Server (Background)
 echo "🧠 Starting Sentinel Brain..."
 source .venv/bin/activate
-python -u src/api/server.py > /tmp/sentinel.log 2>&1 &
+python -u -m src.api.server > /tmp/sentinel.log 2>&1 &
 SERVER_PID=$!
 echo "   Sentinel Server PID: $SERVER_PID"
 
@@ -106,7 +108,7 @@ while true; do
     # Run with lower priority to prevent system freeze
     # Log BOTH stdout and stderr to file
     LOG_FILE="$(pwd)/logs/openclaw_gateway.log"
-    nice -n 10 "$OPENCLAW_PATH" gateway run > "$LOG_FILE" 2>&1
+    nice -n 10 "$OPENCLAW_PATH" gateway run --password "${OPENCLAW_PASSWORD}" > "$LOG_FILE" 2>&1
     EXIT_CODE=$?
     LAST_RESTART_TIME=$(date +%s)
   
