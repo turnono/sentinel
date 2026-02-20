@@ -26,15 +26,37 @@ def enforce_config():
             del plugins["sentinel"]
             modified = True
 
-        # Enforce Deny Exec Tool
-        tools = config.get("tools", {})
-        deny_list = tools.get("deny", [])
-        if "exec" not in deny_list:
-            print("🛡️  Adding 'exec' to deny list...")
-            deny_list.append("exec")
-            tools["deny"] = deny_list
-            modified = True
+        # Double-check Red Lines (Auto-Enforcement)
+        # The 'gateway' object is defined later in the original code.
+        # We need to ensure it's available here or move this block.
+        # For now, assuming 'gateway' is initialized before this point if needed,
+        # or that it's okay to get it again.
+        # Let's initialize gateway here to be safe, as the original code initializes it later.
+        gateway = config.get("gateway", {}) # Initialize gateway here for the new block
+        nodes = gateway.get("nodes", {})
+        deny = nodes.get("denyCommands", [])
         
+        # Executive Expansion (Mission 003): Allow calendar/tasks/contacts
+        executive_tools = ["calendar.add", "contacts.add", "reminders.add"]
+        originally_denied = [t for t in executive_tools if t in deny]
+        if originally_denied:
+            print(f"🏛️  Unblocking executive tools: {', '.join(originally_denied)}...")
+            deny = [t for t in deny if t not in executive_tools]
+            modified = True
+
+        if "exec" not in deny:
+            print("🛡️  Adding 'exec' to deny list...")
+            deny.append("exec")
+            modified = True
+            
+        if modified:
+            nodes["denyCommands"] = deny
+            gateway["nodes"] = nodes
+            config["gateway"] = gateway
+
+        # The original 'tools' block for deny/allow is now partially replaced/modified.
+        # The 'allow' part still refers to 'tools'.
+        tools = config.get("tools", {}) # Re-initialize tools as it's still used for allow_list
         # Ensure 'exec' is NOT in allow list
         allow_list = tools.get("allow", [])
         if "exec" in allow_list:
@@ -58,16 +80,60 @@ def enforce_config():
         
         # Enforce Password Auth and remove invalid bind
         gateway = config.get("gateway", {})
+        if gateway.get("port") != 18790:
+            print("⚓ Rotating Gateway Port to 18790 (Connection Reset)...")
+            gateway["port"] = 18790
+            modified = True
+
         if "bind" in gateway:
             print("🧹 Removing invalid 'bind' key from gateway...")
             del gateway["bind"]
             modified = True
             
-        auth_mode = gateway.get("auth", {}).get("mode", "token")
-        if auth_mode != "password":
-            # We keep 'token' if already configured, but ensure it's secure. 
-            # In some previous runs we wanted 'password'.
-            pass
+        auth_config = gateway.get("auth", {})
+        if auth_config.get("mode") != "password":
+            print("🛡️  Enforcing 'password' authentication mode...")
+            auth_config["mode"] = "password"
+            modified = True
+            
+        if "token" in auth_config:
+            print("🧹 Purging stale device token from authentication config...")
+            del auth_config["token"]
+            modified = True
+            
+        if modified:
+            gateway["auth"] = auth_config
+            config["gateway"] = gateway
+
+        # Enforce CLI Remote Authentication (so CLI works without password prompt)
+        env_path = Path("/Users/<USER>/sentinel/.env")
+        password = None
+        if env_path.exists():
+            with open(env_path) as f:
+                for line in f:
+                    if line.startswith("OPENCLAW_PASSWORD="):
+                        password = line.split("=", 1)[1].strip()
+                        break
+        
+        if password:
+            # Server-side auth truth
+            auth_config = gateway.get("auth", {})
+            if auth_config.get("password") != password:
+                print("🔑 Setting gateway auth password...")
+                auth_config["password"] = password
+                gateway["auth"] = auth_config
+                config["gateway"] = gateway
+                modified = True
+
+            # Client-side (CLI) remote config
+            remote = gateway.get("remote", {})
+            if remote.get("password") != password or remote.get("url") != "ws://127.0.0.1:18790":
+                print("🔑 Synchronizing CLI remote credentials (ws://)...")
+                remote["password"] = password
+                remote["url"] = "ws://127.0.0.1:18790"
+                gateway["remote"] = remote
+                config["gateway"] = gateway
+                modified = True
 
         # Remove stale 'my-chrome' profile if present
         if "my-chrome" in browser.get("profiles", {}):
@@ -84,29 +150,30 @@ def enforce_config():
         valid_models = [
             "google-antigravity/gemini-3-flash",
             "google-antigravity/gemini-3-pro-low", 
-            "google-antigravity/claude-opus-4-6-thinking"
+            "google-antigravity/claude-opus-4-6-thinking",
+            "ollama/gemma3",
+            "ollama/deepseek-v3"
         ]
         
         # Default to gemini-3-flash if current is invalid or not an antigravity model
+        # Ensure all rotation models are registered in agents.defaults.models
+        models = defaults.get("models", {})
+        rotation_reg_needed = False
+        for model_name in valid_models:
+            if model_name not in models:
+                models[model_name] = {}
+                rotation_reg_needed = True
+        
+        if rotation_reg_needed:
+            defaults["models"] = models
+            modified = True
+
+        # Default to gemini-3-flash only if current is NO model or completely unknown
         current_primary = model_config.get("primary", "")
-        if current_primary not in valid_models:
+        if not current_primary or (current_primary not in valid_models and not any(current_primary.startswith(p) for p in ["morpheus/", "ollama/", "local/"])):
             print("🔄 Switching to gemini-3-flash (default fallback)...")
             model_config["primary"] = "google-antigravity/gemini-3-flash"
             defaults["model"] = model_config
-            
-            # Ensure all models are registered
-            models = defaults.get("models", {})
-            for model_name in ["google-antigravity/gemini-3-pro-low", 
-                             "google-antigravity/gemini-3-flash",
-                             "google-antigravity/claude-opus-4-6-thinking"]:
-                if model_name not in models:
-                    models[model_name] = {}
-            defaults["models"] = models
-            agents["defaults"] = defaults
-            config["agents"] = agents
-            defaults["models"] = models
-            agents["defaults"] = defaults
-            config["agents"] = agents
             modified = True
 
         # Enforce Specialized Agents
@@ -139,9 +206,11 @@ def enforce_config():
             agents_list.append(architect_agent)
             modified = True
         
-        if architect_agent.get("model") != "google-antigravity/gemini-3-flash":
-            print("🏗️  Enforcing gemini-3-flash for Architect...")
-            architect_agent["model"] = "google-antigravity/gemini-3-flash"
+        # Support Dynamic Model Rotation: Remove explicit 'model' if it's one of the rotation group
+        # This allows the agent to inherit the primary model set by failover.py
+        if architect_agent.get("model") in valid_models:
+            print("🏗️  Allowing Architect to inherit primary model (Enabling Failover)...")
+            architect_agent.pop("model", None)
             modified = True
         
         # TAAJIRAH CORE: Load Sovereign Context for Architect
@@ -207,9 +276,10 @@ def enforce_config():
              agents_list.append(sentinel_agent)
              modified = True
              
-        if sentinel_agent.get("model") != "google-antigravity/gemini-3-flash":
-            print("🛡️  Enforcing gemini-3-flash for Sentinel...")
-            sentinel_agent["model"] = "google-antigravity/gemini-3-flash"
+        # Support Dynamic Model Rotation
+        if sentinel_agent.get("model") in valid_models:
+            print("🛡️  Allowing Sentinel to inherit primary model (Enabling Failover)...")
+            sentinel_agent.pop("model", None)
             modified = True
         
         # Load AIEOS Identity for Sentinel
@@ -273,11 +343,66 @@ def enforce_config():
             config["plugins"]["entries"] = plugins
             modified = True
 
+        # Executive Skills & Memory (Mission 011 & 012)
+        if "sag" in plugins:
+            print("🧹 Correcting sag: removing from plugin registry (it is a skill)...")
+            del plugins["sag"]
+            modified = True
+
+        # Enforce Semantic Memory (memory-lancedb - OMNISCIENCE)
+        if "memory-lancedb" not in plugins:
+            print("🧠 Enforcing Semantic Memory (LanceDB)...")
+            plugins["memory-lancedb"] = {
+                "enabled": True,
+                "config": {
+                    "embedding": {
+                        "apiKey": "local-sovereign",
+                        "model": "nomic-embed-text",
+                        "baseUrl": "http://127.0.0.1:11434/v1",
+                        "dimensions": 768
+                    },
+                    "autoCapture": True,
+                    "autoRecall": True
+                }
+            }
+            modified = True
+
+        if modified:
+            config["plugins"]["entries"] = plugins
+
+        # Enforce Memory Slot to LanceDB (OMNISCIENCE)
+        plugins_config = config.get("plugins", {})
+        slots = plugins_config.get("slots", {})
+        if slots.get("memory") != "memory-lancedb":
+            print("🧠 Migrating memory slot to 'memory-lancedb' (OMNISCIENCE)...")
+            slots["memory"] = "memory-lancedb"
+            plugins_config["slots"] = slots
+            config["plugins"] = plugins_config
+            modified = True
+
+        # Clean up invalid 'memory' key if present from previous run
+        agents = config.get("agents", {})
+        defaults = agents.get("defaults", {})
+        if "memory" in defaults:
+            print("🧹 Purging invalid 'memory' key from agents.defaults...")
+            del defaults["memory"]
+            agents["defaults"] = defaults
+            config["agents"] = agents
+            modified = True
+
         # Enforce Voice-Call Skill
         skills_entries = config.get("skills", {}).get("entries", {})
         if "voice-call" not in skills_entries:
             print("📞 Enabling Voice-Call skill...")
             skills_entries["voice-call"] = {
+                "enabled": True
+            }
+            config["skills"]["entries"] = skills_entries
+            modified = True
+
+        if "sag" not in skills_entries:
+            print("🗣️  Enabling sag skill...")
+            skills_entries["sag"] = {
                 "enabled": True
             }
             config["skills"]["entries"] = skills_entries

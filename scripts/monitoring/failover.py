@@ -24,7 +24,9 @@ QUOTA_ERRORS = [
 MODEL_ROTATION = [
     "google-antigravity/gemini-3-flash",
     "google-antigravity/gemini-3-pro-low",
-    "google-antigravity/claude-opus-4-6-thinking"
+    "google-antigravity/claude-opus-4-6-thinking",
+    "ollama/gemma3",
+    "ollama/deepseek-v3"
 ]
 
 logging.basicConfig(

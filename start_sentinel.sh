@@ -20,8 +20,8 @@ echo "🔒 Locking OpenClaw configuration..."
 python3 enforce_config.py
 
 # 2. Kill Stale Servers (Robust)
-echo "🧹 Cleaning up ports 8765 and 18789..."
-for PORT in 8765 18789; do
+echo "🧹 Cleaning up ports 8765, 18789, and 18790..."
+for PORT in 8765 18789 18790; do
   PID=$(lsof -t -i:$PORT || true)
   if [ -n "$PID" ]; then
     echo "   Killing old process on port $PORT (PID: $PID)"
@@ -53,6 +53,12 @@ echo "🧠 Starting Model Monitor (Smart Fallback)..."
 python -u scripts/monitoring/failover.py > /tmp/model_monitor.log 2>&1 &
 MONITOR_MODEL_PID=$!
 echo "   Model Monitor PID: $MONITOR_MODEL_PID"
+
+# 4b. Start Autonomic Sentinel (Background - Mission 006)
+echo "🛡️  Starting Autonomic Sentinel (Self-Healing)..."
+python -u scripts/monitoring/autonomic.py > /tmp/autonomic_monitor.log 2>&1 &
+MONITOR_HEAL_PID=$!
+echo "   Autonomic Monitor PID: $MONITOR_HEAL_PID"
 
 # Wait for server to be ready (simple sleep for now)
 sleep 2
@@ -135,3 +141,4 @@ echo "🛑 Stopping background services..."
 kill $SERVER_PID 2>/dev/null || true
 kill $MONITOR_PID 2>/dev/null || true
 kill $MONITOR_MODEL_PID 2>/dev/null || true
+kill $MONITOR_HEAL_PID 2>/dev/null || true
