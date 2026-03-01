@@ -1,0 +1,34 @@
+{
+    "name": "sentinel",
+    "version": "1.0.0",
+    "description": "System security guardian and audit skill",
+    "entrypoint": "sentinel_admin.py",
+    "tools": [
+        {
+            "name": "sentinel_admin",
+            "description": "Perform administrative operations on the Sentinel security system",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "list_pending",
+                            "approve",
+                            "reject",
+                            "status"
+                        ],
+                        "description": "The administrative action to perform"
+                    },
+                    "target_id": {
+                        "type": "string",
+                        "description": "The ID of the command or policy to act upon"
+                    }
+                },
+                "required": [
+                    "action"
+                ]
+            }
+        }
+    ]
+}

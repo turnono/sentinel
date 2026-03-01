@@ -1,0 +1,53 @@
+<div class="container">
+  <header>
+    <div class="logo-area">
+      <h1>🛡️ Sentinel</h1>
+      <span class="badge">v2.0</span>
+    </div>
+    <div class="status-panel">
+      <button *ngIf="authError" (click)="promptForToken()" class="btn-login">Login Required</button>
+      <span class="status-indicator" [class.online]="isOnline" [class.offline]="!isOnline"></span>
+      <span id="server-status">{{ isOnline ? 'System Online' : 'Connecting...' }}</span>
+    </div>
+  </header>
+
+  <main>
+    <div class="grid">
+      <!-- Pending Approvals -->
+      <section class="panel">
+        <h2>⏳ Pending Approvals</h2>
+        <div class="card-list">
+          <div *ngIf="pendingRequests.length === 0" class="loading-spinner">No pending approvals</div>
+
+          <div *ngFor="let req of pendingRequests" class="card">
+            <div class="card-content">
+              <div class="card-header">
+                <span class="cmd">{{ req.command }}</span>
+              </div>
+              <span class="reason">{{ req.reason || 'Policy requires review' }}</span>
+              <div class="actions">
+                <button class="btn-deny" (click)="deny(req.id)">Deny</button>
+                <button class="btn-approve" (click)="approve(req.id)">Approve</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Recent Activity -->
+      <section class="panel">
+        <h2>📝 Recent Activity</h2>
+        <div class="log-list">
+          <div *ngFor="let log of auditLogs" class="log-item">
+            <span class="log-status" [class.allowed]="log.allowed" [class.blocked]="!log.allowed">
+              {{ log.allowed ? 'Allowed' : 'Blocked' }}
+            </span>
+            <span class="log-cmd">{{ log.command }}</span>
+            <span class="log-time">{{ log.timestamp }}</span>
+          </div>
+          <div *ngIf="auditLogs.length === 0" class="loading-spinner">No recent activity</div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>

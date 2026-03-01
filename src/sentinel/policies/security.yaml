@@ -1,0 +1,64 @@
+# Sentinel Security Policy
+# Inspired by ZeroClaw's strong security model.
+
+version: "1.0"
+
+# Default action if no rule matches
+default_action: "block"
+
+# Rules are evaluated in order
+rules:
+  # Safe read-only commands
+  - 
+    name: "Allow Safe Reads"
+    pattern: "^(ls|cat|echo|pwd|whoami|date|grep|find|head|tail|ps).*"
+    action: "allow"
+    description: "Standard reconnaissance and read-only commands"
+
+  # Allow Trusted OpenClaw Tools (Internal)
+  - 
+    name: "Allow Sentinel Admin"
+    pattern: "^python.*sentinel_admin.py.*"
+    action: "allow"
+    description: "Allow Sentinel admin tools"
+
+  - 
+    name: "Allow Code Wiki"
+    pattern: "^python.*codewiki.py.*"
+    action: "allow"
+    description: "Allow Code Wiki skill"
+
+  # Development tools (Python/Node) - Review required for execution
+  - 
+    name: "Review Interpreters"
+    pattern: "^(python|python3|node|npm|pip).*"
+    action: "review"
+    description: "Execution of script interpreters requires approval"
+
+  # Network tools - Strict Review
+  - 
+    name: "Network Access"
+    pattern: "^(curl|wget|ssh|nc|netcat|telnet|ping).*"
+    action: "review"
+    description: "Outbound network requests must be approved"
+
+  # File system modification
+  - 
+    name: "File Writes"
+    pattern: "^(touch|mkdir|cp|mv|rm|chmod|chown).*"
+    action: "review"
+    description: "File system modifications require approval"
+
+  # Dangerous/System commands - Strictly Blocked
+  - 
+    name: "Block System Criticial"
+    pattern: "^(mkfs|dd|reboot|shutdown|init|killall).*"
+    action: "block"
+    description: "Destructive system commands are forbidden"
+
+  # Block Token/Secret exfiltration
+  - 
+    name: "Block Secret Exfiltration"
+    pattern: ".*(cat|grep).*(id_rsa|token|key|password|credential).*"
+    action: "block"
+    description: "Attempts to read credential files are blocked"

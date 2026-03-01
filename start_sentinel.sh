@@ -1,76 +1,52 @@
 #!/bin/bash
-set -e
 
-echo "🛡️  Sentinel Hardened Launch Sequence Initiated..."
+# Sentinel: Sovereign Security Guardian
+# Optimized for ZeroClaw Integration & Privacy
 
-# 1. Enforce Configuration
-echo "🔒 Locking OpenClaw configuration..."
-python3 enforce_config.py
+# 1. Environment & Initialization
+echo "🛡️  Initializing Sentinel Security Layers..."
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
-# 2. Kill Stale Servers (Robust)
-echo "🧹 Cleaning up ports 8765 and 18789..."
-for PORT in 8765 18789; do
-  PID=$(lsof -t -i:$PORT || true)
-  if [ -n "$PID" ]; then
-    echo "   Killing old process on port $PORT (PID: $PID)"
+# 2. Port Check & Cleanup
+for PORT in 8765 18790; do
+  PID=$(lsof -ti :$PORT)
+  if [ ! -z "$PID" ]; then
+    echo "⚠️  Port $PORT occupied by PID $PID. Clearing..."
     kill -9 $PID
   fi
 done
 
-echo "   Aggressively killing any lingering OpenClaw instances..."
-pkill -9 -f "openclaw gateway" || true
-pkill -9 -f "ai.openclaw.gateway" || true
-# Wait a moment for ports to actually free up
+echo "   Aggressively killing any lingering instances..."
+pkill -9 -f "scripts/monitoring/" || true
+pkill -9 -f "sentinel_server.py" || true
+pkill -9 -f "context_monitor.py" || true
+pkill -9 -f "model_monitor.py" || true
 sleep 2
 
-# 3. Start Sentinel Server (Background)
+# 3. Start Sentinel Server (Brain)
 echo "🧠 Starting Sentinel Brain..."
 source .venv/bin/activate
 python -u sentinel_server.py > /tmp/sentinel.log 2>&1 &
 SERVER_PID=$!
-echo "   Sentinel Server PID: $SERVER_PID"
 
-# 4. Start Context Monitor (Background)
-echo "👀 Starting Context Monitor..."
+# 4. Start New Upstream Monitors
+echo "👀 Starting Context & Model Monitors..."
 python -u context_monitor.py > /tmp/context_monitor.log 2>&1 &
 MONITOR_PID=$!
-echo "   Context Monitor PID: $MONITOR_PID"
-
-# 4a. Start Model Monitor (Background)
-echo "🧠 Starting Model Monitor (Smart Fallback)..."
 python -u model_monitor.py > /tmp/model_monitor.log 2>&1 &
 MONITOR_MODEL_PID=$!
-echo "   Model Monitor PID: $MONITOR_MODEL_PID"
 
-# Wait for server to be ready (simple sleep for now)
-sleep 2
+# 5. Start Autonomic Healing (Phase 7 upgrade)
+echo "🩹 Starting Autonomic Healing Monitor..."
+python -u scripts/monitoring/autonomic.py > /tmp/sentinel_healing.log 2>&1 &
+MONITOR_HEAL_PID=$!
 
-# 5. Start OpenClaw Gateway (Loop for Auto-Restart)
-echo "🦞 Releasing the Lobster..."
-# Load nvm to ensure openclaw is in PATH
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-nvm use v22.14.0
-
-OPENCLAW_PATH=$(which openclaw)
-echo "   OpenClaw Path: $OPENCLAW_PATH"
-
-while true; do
-    openclaw gateway
-    EXIT_CODE=$?
-  
-    if [ -f "/tmp/openclaw_restart_requested" ]; then
-        echo "🔄 Restarting OpenClaw due to Smart Model Switch..."
-        rm /tmp/openclaw_restart_requested
-        sleep 2
-        continue
-    else
-        break
-    fi
-done
+echo "✅ Sentinel Security Layers are active."
+echo "   (ZeroClaw Gateway is managed as a background service via launchd)"
 
 # Cleanup on exit
-echo "🛑 Stopping background services..."
-kill $SERVER_PID 2>/dev/null || true
-kill $MONITOR_PID 2>/dev/null || true
-kill $MONITOR_MODEL_PID 2>/dev/null || true
+trap 'kill $SERVER_PID $MONITOR_PID $MONITOR_MODEL_PID $MONITOR_HEAL_PID 2>/dev/null' EXIT
+
+# Keep script alive to maintain background monitors
+wait

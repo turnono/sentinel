@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+import sys
+import os
+import json
+import urllib.request
+import urllib.error
+from pathlib import Path
+
+# Load config/env
+SENTINEL_HOST = os.getenv("SENTINEL_HOST", "127.0.0.1")
+SENTINEL_PORT = os.getenv("SENTINEL_PORT", "8765")
+BASE_URL = f"http://{SENTINEL_HOST}:{SENTINEL_PORT}"
+
+# Try to load token from .env in parent directory
+token = os.getenv("SENTINEL_AUTH_TOKEN")
+if not token:
+    # Try current directory first, then parent
+    possible_paths = [Path(".env"), Path(__file__).parent.parent / ".env"]
+    for env_path in possible_paths:
+        if env_path.exists():
+            with open(env_path) as f:
+                for line in f:
+                    if line.strip().startswith("SENTINEL_AUTH_TOKEN="):
+                        token = line.strip().split("=", 1)[1]
+                        break
+            if token: break
+
+if not token:
+    print("❌ SENTINEL_AUTH_TOKEN not found in environment or .env file.")
+    sys.exit(1)
+
+HEADERS = {"X-Sentinel-Token": token, "Content-Type": "application/json"}
+
+def list_pending():
+    try:
+        req = urllib.request.Request(f"{BASE_URL}/pending", headers=HEADERS)
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+        
+        if not data:
+            print("✨ No pending requests.")
+            return
+
+        print("\n📋 Pending Approval Requests:")
+        print("-" * 60)
+        for req_id, req in data.items():
+            print(f"ID: {req_id}")
+            print(f"Command: {req['command']}")
+            print(f"Reason: {req['reason']}")
+            print("-" * 60)
+            
+    except urllib.error.URLError as e:
+        print(f"❌ Failed to list requests: {e}")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+
+def approve_request(req_id):
+    print(f"🚀 Approving request {req_id}...")
+    try:
+        req = urllib.request.Request(f"{BASE_URL}/approve/{req_id}", headers=HEADERS, method="POST")
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode())
+        
+        print("\n✅ Execution Result:")
+        print(f"Allowed: {result.get('allowed')}")
+        if result.get('stdout'):
+            print("--- STDOUT ---")
+            print(result['stdout'])
+        if result.get('stderr'):
+            print("--- STDERR ---")
+            print(result['stderr'])
+            
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print(f"❌ Request {req_id} not found.")
+        elif e.code == 400:
+            print(f"❌ Request invalid (already approved?).")
+        else:
+            print(f"❌ Approval failed: {e}")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        list_pending()
+        print("\nUsage: sentinel-approve [REQUEST_ID]")
+    else:
+        approve_request(sys.argv[1])

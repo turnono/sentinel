@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "context7": {
+      "baseUrl": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "ctx7sk-89e06151-7834-4fe7-9a3a-9126866ce22d"
+      }
+    },
+    "whisper": {
+      "command": "npx -y whisper-mcp"
+    },
+    "playwright": {
+      "command": "npx -y @playwright/mcp@latest --cdp-endpoint wss://chrome.browserless.io?token=2U11g2NSQ2j1nCv5c3f2662f757a9cd0459cc24524660336b"
+    }
+  },
+  "imports": []
+}

@@ -7,7 +7,7 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-python3 - <<'PY'
+python3.10 - <<'PY'
 import sys
 if sys.version_info < (3, 10):
     raise SystemExit("Error: Python 3.10+ is required.")
@@ -15,7 +15,7 @@ print(f"Using Python {sys.version.split()[0]}")
 PY
 
 if [ ! -d ".venv" ]; then
-  python3 -m venv .venv
+  python3.10 -m venv .venv
 fi
 
 source .venv/bin/activate

@@ -19,6 +19,7 @@ ENV/
 .env
 .env.local
 .env.*.local
+.credentials/
 
 # IDE
 .idea/
@@ -46,3 +47,56 @@ dist/
 build/
 
 Sentinel-Constitution.yaml
+<<<<<<< HEAD
+# Data and Databases
+data/
+*.db
+data/sentinel.db
+
+
+.firecrawl/
+.adal
+.agent
+.agents
+.skills
+.skills-lock.json
+.mcp
+.claude
+.augment
+.cline
+.zencoder
+.windsurf
+.vibe
+.codebuddy
+.commandcode
+.continue
+.cortex
+.crush
+.factory
+.goose
+.iflow
+.junie
+.kilocode
+.kiro
+.kode
+.mcpjam
+.mux
+.neovate
+.openhands
+.pi
+.pochi
+.qoder
+.qwen
+.roo
+.trae
+# Local Sentinel sensitive/config files
+token.json
+rate-limits-models.txt
+skills-lock.json
+dispatch_research.sh
+nightly_memory_sweep.sh
+data/
+logs/
+*.log
+=======
+>>>>>>> upstream/master
