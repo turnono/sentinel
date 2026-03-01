@@ -4,8 +4,8 @@ import sys
 from pathlib import Path
 
 def enforce_config():
-    config_path = Path.home() / ".openclaw" / "openclaw.json"
-    agents_dir = Path.home() / ".openclaw" / "agents"
+    config_path = Path.home() / ".zeroclaw" / "config.toml"
+    agents_dir = Path.home() / ".zeroclaw" / "skills"
     
     # Forcefully remove agent-level overrides that fight with the global config
     if agents_dir.exists():

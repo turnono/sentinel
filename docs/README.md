@@ -105,9 +105,9 @@ sentinel> sudo rm -rf /
 
 ---
 
-## Integration with OpenClaw
+## Integration with ZeroClaw
 
-Sentinel provides a **native OpenClaw plugin** that adds the `sentinel_exec` tool to your agent.
+Sentinel provides a **native ZeroClaw skill** that adds the `sentinel_audit` functionality to your agent.
 
 ### Quick Install (OpenClaw Plugin)
 
@@ -126,7 +126,7 @@ cp openclaw-plugin/* ~/.openclaw/extensions/sentinel/
 openclaw gateway
 ```
 
-### Usage in OpenClaw TUI
+### Usage in ZeroClaw
 
 ```
 Use sentinel_exec to run "ls -la"

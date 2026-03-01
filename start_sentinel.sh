@@ -9,14 +9,14 @@ if [ -f .env ]; then
   export $(grep -v '^#' .env | xargs)
   echo "   Loaded .env variables"
   echo "   Sentinel Dashboard: http://${SENTINEL_HOST}:8765/dashboard/"
-  echo "   OpenClaw Gateway:   http://<YOUR_IP>:18789/chat?session=main (Password Protected)"
+  echo "   ZeroClaw Gateway:   http://<YOUR_IP>:18789/chat?session=main (Password Protected)"
 fi
 
 # Set PYTHONPATH to include the project root for modular imports
 export PYTHONPATH=$PYTHONPATH:.
 
 # 1. Enforce Configuration
-echo "🔒 Locking OpenClaw configuration..."
+echo "🔒 Locking ZeroClaw configuration..."
 python3 enforce_config.py
 
 # 2. Kill Stale Servers (Robust)
@@ -38,13 +38,7 @@ sleep 2
 
 # ... [Trimming steps 3 and 4 which stay the same] ...
 
-# 5. [DISABLED] Start OpenClaw Gateway (Loop for Auto-Restart)
-# echo "🦞 Releasing the Lobster..."
-# ... code removed for brevity in this comment ...
-# while true; do 
-#   ...
-# done
-echo "✅ Sentinel Security Layers are active. (OpenClaw Gateway Disabled)"
+echo "✅ Sentinel Security Layers are active. (ZeroClaw Gateway Managed Separately)"
 
 
 # Cleanup on exit
