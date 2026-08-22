@@ -3,9 +3,27 @@ import os
 import sys
 from pathlib import Path
 
+import claw_env
+
 def enforce_config():
-    config_path = Path.home() / ".zeroclaw" / "config.toml"
-    agents_dir = Path.home() / ".zeroclaw" / "skills"
+    # 0515a5f renamed these two constants to ~/.zeroclaw/config.toml as part of
+    # a prose find-replace, without porting the reader, the writer, or the
+    # schema below -- all of which are OpenClaw's JSON layout (plugins.entries,
+    # gateway.auth, agents.defaults.model, channels.whatsapp, skills.load), the
+    # same layout docs/README.md still documents. Resolve the config that is
+    # actually on disk rather than trusting either spelling.
+    state_dir = claw_env.state_dir()
+    config_path = claw_env.config_path()
+    agents_dir = state_dir / "agents"
+
+    if config_path.suffix == ".toml":
+        print(
+            f"❌ Resolved a TOML config ({config_path}), but every key this "
+            "script enforces is OpenClaw's JSON schema. Writing to it would "
+            "produce a config the gateway cannot read. Pin the JSON install "
+            "with CLAW_BRAND, or port this script to the TOML schema first."
+        )
+        sys.exit(1)
     
     # Forcefully remove agent-level overrides that fight with the global config
     if agents_dir.exists():
@@ -18,8 +36,10 @@ def enforce_config():
                     pass
 
     if not config_path.exists():
+        # Non-zero: heal_auth() runs this with check=True, and a config that was
+        # never enforced must not be reported to the healing log as a repair.
         print(f"❌ Config file not found: {config_path}")
-        return
+        sys.exit(1)
 
     try:
         if config_path.exists():
@@ -158,7 +178,10 @@ def enforce_config():
             p = profiles[name]
             if any(k in p for k in ["accessToken", "refreshToken", "clientId", "clientSecret", "apiKey"]):
                 print(f"🧹 Sanitizing profile auth keys: {name}...")
-                profiles[name] = {"provider": p["provider"], "mode": p["mode"]}
+                kept = {k: p[k] for k in ("provider", "mode") if k in p}
+                if not kept:
+                    print(f"⚠️  Profile {name} has no provider/mode; leaving it empty.")
+                profiles[name] = kept
                 profiles_modified = True
         
         if google_api_key and profiles.get("google", {}).get("mode") != "api_key":
@@ -193,7 +216,7 @@ def enforce_config():
         
         def ensure_identity(agent_id, prompt):
             workspace_root = Path.home() / "taajirah_systems" / "BOARDROOM"
-            agent_dir = Path.home() / ".openclaw" / "agents" / agent_id / "agent"
+            agent_dir = agents_dir / agent_id / "agent"
             agent_dir.mkdir(parents=True, exist_ok=True)
             identity_file = agent_dir / "IDENTITY.md"
             if workspace_root.exists() and agent_id == "architect":
@@ -223,14 +246,18 @@ def enforce_config():
         ensure_identity("sentinel", "You are Sentinel, the security guardian. Audit system state and enforce safety protocols.")
 
         agents["list"] = agents_list
+        # defaults may be a fresh dict when the config had no agents.defaults;
+        # without this the model enforcement above is lost on write.
+        agents["defaults"] = defaults
         config["agents"] = agents
 
         # Skill Directories (Sentinel & ClawdCursor)
         skills = config.get("skills", {})
         load_conf = skills.get("load", {})
         extra_dirs = load_conf.get("extraDirs", [])
-        paths = [str((Path.home() / "sentinel" / "openclaw-skill").resolve()), 
-                 str((Path.home() / ".openclaw" / "workspace" / "skills" / "clawd-cursor").resolve())]
+        # "openclaw-skill" is this repo's own directory name, not a brand path.
+        paths = [str((Path.home() / "sentinel" / "openclaw-skill").resolve()),
+                 str((state_dir / "workspace" / "skills" / "clawd-cursor").resolve())]
         for p in paths:
             if p not in extra_dirs:
                 print(f"➕ Registering skill: {p}")
