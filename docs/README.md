@@ -2,7 +2,6 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-26%20passing-brightgreen.svg)]()
 
 **Sentinel** is a security gateway for agentic AI frameworks. It intercepts shell commands, applies deterministic guardrails, and only executes commands that pass policy.
 
@@ -86,13 +85,23 @@ SENTINEL_ALLOWED_ORIGINS=http://localhost,http://127.0.0.1
 SENTINEL_EXEC_TIMEOUT_SEC=15
 ```
 
-For OpenClaw plugin calls, set the same `SENTINEL_AUTH_TOKEN` in the plugin environment.
+Callers of the HTTP API (including the OpenClaw skill) must send this same
+`SENTINEL_AUTH_TOKEN` in the `X-Sentinel-Token` header.
 
-### 3. Test the Safe Terminal
+### 3. Create Your Constitution
+
+`Sentinel-Constitution.yaml` holds your security policy. It is intentionally
+gitignored, so the repo does not ship one -- create it in the project root
+before first run, using the sample under
+[Constitution (Policy Configuration)](#constitution-policy-configuration)
+as a starting point. Without it, the terminal and the red-team script both
+exit with `FileNotFoundError`.
+
+### 4. Test the Safe Terminal
 
 ```bash
 source .venv/bin/activate
-python sentinel_shell.py
+python -m src.api.shell
 ```
 
 ```
@@ -105,35 +114,58 @@ sentinel> sudo rm -rf /
 
 ---
 
-## Integration with ZeroClaw
+## Integration with OpenClaw
 
-Sentinel provides a **native ZeroClaw skill** that adds the `sentinel_audit` functionality to your agent.
+> **On the name:** parts of this repo were renamed to "ZeroClaw" in `0515a5f`,
+> but that rename was never completed -- the config schema, paths, and CLI
+> this project integrates with are all OpenClaw's. The docs below describe
+> what the code actually does. `claw_env.py` resolves either spelling at
+> runtime, so both installs work; set `CLAW_BRAND` to pin one.
 
-### Quick Install (OpenClaw Plugin)
+Sentinel ships as an OpenClaw **skill** in `openclaw-skill/`, exposing the
+`sentinel_admin` tool. Command auditing itself runs over the HTTP API.
+
+### Install the Skill
+
+`enforce_config.py` registers the skill directory for you, appending it to
+`skills.load.extraDirs` in the gateway config:
 
 ```bash
-# 1. Copy plugin to OpenClaw extensions
-mkdir -p ~/.openclaw/extensions/sentinel
-cp openclaw-plugin/* ~/.openclaw/extensions/sentinel/
-
-# 2. Enable in config (~/.openclaw/openclaw.json)
-# Add to plugins.entries:
-#   "sentinel": { "enabled": true }
-# Add to tools.allow:
-#   ["sentinel_exec", "group:plugins"]
-
-# 3. Restart gateway
-openclaw gateway
+python3 enforce_config.py
 ```
 
-### Usage in ZeroClaw
+To register it by hand instead, add the absolute path of `openclaw-skill/`
+to `skills.load.extraDirs` in your gateway config, then restart the gateway.
 
-```
-Use sentinel_exec to run "ls -la"
-→ ✅ SENTINEL APPROVED (executes command)
+### Usage in OpenClaw
 
-Use sentinel_exec to run "sudo rm -rf /"
-→ 🛡️ SENTINEL BLOCKED: Blocked token detected: sudo
+The `sentinel_admin` tool takes an `action` (and an optional `target_id`):
+
+| Action | Effect |
+|--------|--------|
+| `status` | Report Sentinel's current state |
+| `list_pending` | List commands awaiting manual approval |
+| `approve` / `reject` | Resolve a pending command by `target_id` |
+
+### Auditing Commands over HTTP
+
+Start the API with `python -m src.api.server`. It binds `127.0.0.1:8765`
+by default (`SENTINEL_HOST` / `SENTINEL_PORT` override both).
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /health` | Liveness check |
+| `POST /audit` | Audit a command and execute it if approved |
+| `POST /audit-only` | Audit a command without executing it |
+| `GET /pending` | List commands awaiting approval |
+| `POST /approve/{request_id}` | Approve a pending command |
+
+```bash
+curl -X POST http://127.0.0.1:8765/audit-only \
+  -H "X-Sentinel-Token: $SENTINEL_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"command": "sudo rm -rf /"}'
+# {"allowed": false, "reason": "Blocked token detected: sudo", ...}
 ```
 
 ### HTTP API Hardening Defaults
@@ -146,17 +178,17 @@ Use sentinel_exec to run "sudo rm -rf /"
 ### Python Integration (Standalone)
 
 ```python
-from sentinel import SentinelRuntime
+from src.sentinel.main import SentinelRuntime
 
 runtime = SentinelRuntime()
 
 def safe_execute(cmd: str) -> str:
     """Replace your agent's shell executor with this."""
     result = runtime.run_intercepted_command(cmd)
-    
+
     if not result["allowed"]:
-        raise SecurityError(f"Command blocked: {result['reason']}")
-    
+        raise PermissionError(f"Command blocked: {result['reason']}")
+
     return result["stdout"]
 ```
 
@@ -204,18 +236,29 @@ When `lockdown_mode: true`, **only commands in `allowed_commands` are permitted*
 
 ## Running Tests
 
+`pytest` is not in `requirements.txt`; install it into the venv first:
+
 ```bash
-# All tests
-python -m pytest tests/ -v
-
-# Red-team bypass tests
-python tests/red_team_test.py
-
-# Comprehensive unit tests
-python tests/test_command_auditor.py
+source .venv/bin/activate
+pip install pytest
 ```
 
-**Test coverage**: 26 tests covering success paths, failure paths, edge cases, and obfuscation detection.
+```bash
+# Unit tests for the deterministic auditor (no API key needed)
+python -m pytest tests/test_command_auditor.py -v
+
+# Full suite -- test_api.py and test_monitor.py need the API and
+# gateway dependencies installed
+python -m pytest tests/ -v
+
+# Red-team bypass checks (a script, not a pytest module)
+python tests/red_team_test.py
+```
+
+Tests cover success paths, failure paths, edge cases, and obfuscation
+detection. Everything except `test_vertex_ai.py` runs offline, but each
+suite needs `Sentinel-Constitution.yaml` in the project root (see Quick
+Start step 3).
 
 ---
 
