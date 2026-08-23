@@ -25,6 +25,12 @@ def enforce_config():
         )
         sys.exit(1)
     
+    if not config_path.exists():
+        # Non-zero: heal_auth() runs this with check=True, and a config that was
+        # never enforced must not be reported to the healing log as a repair.
+        print(f"❌ Config file not found: {config_path}")
+        sys.exit(1)
+
     # Forcefully remove agent-level overrides that fight with the global config
     if agents_dir.exists():
         for override in ["models.json", "auth-profiles.json", "auth.json"]:
@@ -34,12 +40,6 @@ def enforce_config():
                     print(f"🧹 Purged override: {p}")
                 except Exception:
                     pass
-
-    if not config_path.exists():
-        # Non-zero: heal_auth() runs this with check=True, and a config that was
-        # never enforced must not be reported to the healing log as a repair.
-        print(f"❌ Config file not found: {config_path}")
-        sys.exit(1)
 
     try:
         if config_path.exists():

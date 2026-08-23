@@ -18,17 +18,26 @@ ENFORCE_SCRIPT = SENTINEL_DIR / "enforce_config.py"
 
 
 def gateway_log():
-    """The gateway log, under whichever spelling the service writes.
+    """The newest gateway log, wherever the service actually writes it.
+
+    Two conventions are in play: a launchd plist redirecting the gateway's
+    output to ~/sentinel/logs/<brand>_gateway.log, and the gateway's own
+    /tmp/<brand>/<brand>-*.log that claw_env resolves. Nothing in this repo
+    writes the former, so checking only there waits forever on a setup that
+    uses the latter. Search both and take whichever is newest.
 
     Re-probed rather than resolved once at import: the service may not have
-    created the file yet when the monitor starts.
+    created any log yet when the monitor starts.
     """
+    candidates = list(claw_env.gateway_logs())
     log_dir = SENTINEL_DIR / "logs"
     for name in claw_env.BRANDS:
         candidate = log_dir / f"{name}_gateway.log"
         if candidate.is_file():
-            return candidate
-    return None
+            candidates.append(candidate)
+    if not candidates:
+        return None
+    return max(candidates, key=os.path.getmtime)
 
 # Healing Registry (Pattern -> Action Description)
 HEALING_PATTERNS = {
