@@ -3,13 +3,41 @@ import os
 import subprocess
 import logging
 import re
+import sys
 from pathlib import Path
+
+# The monitors run as scripts, not as a package, so the repo root is not
+# on sys.path by default.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import claw_env
 
 # Configuration
 SENTINEL_DIR = Path.home() / "sentinel"
-GATEWAY_LOG = SENTINEL_DIR / "logs" / "openclaw_gateway.log"
 HEALING_LOG = Path.home() / "taajirah_systems" / "JOURNAL" / "SENTINEL_HEALING.log"
 ENFORCE_SCRIPT = SENTINEL_DIR / "enforce_config.py"
+
+
+def gateway_log():
+    """The newest gateway log, wherever the service actually writes it.
+
+    Two conventions are in play: a launchd plist redirecting the gateway's
+    output to ~/sentinel/logs/<brand>_gateway.log, and the gateway's own
+    /tmp/<brand>/<brand>-*.log that claw_env resolves. Nothing in this repo
+    writes the former, so checking only there waits forever on a setup that
+    uses the latter. Search both and take whichever is newest.
+
+    Re-probed rather than resolved once at import: the service may not have
+    created any log yet when the monitor starts.
+    """
+    candidates = list(claw_env.gateway_logs())
+    log_dir = SENTINEL_DIR / "logs"
+    for name in claw_env.BRANDS:
+        candidate = log_dir / f"{name}_gateway.log"
+        if candidate.is_file():
+            candidates.append(candidate)
+    if not candidates:
+        return None
+    return max(candidates, key=os.path.getmtime)
 
 # Healing Registry (Pattern -> Action Description)
 HEALING_PATTERNS = {
@@ -17,6 +45,9 @@ HEALING_PATTERNS = {
     r"gateway connect failed": "Gateway connection failure. Forcing restart.",
     r"EADDRINUSE": "Port conflict detected. Cleaning up and restarting.",
 }
+
+# The journal dir must exist before FileHandler opens the log below.
+HEALING_LOG.parent.mkdir(parents=True, exist_ok=True)
 
 # Configure logging
 logging.basicConfig(
@@ -42,7 +73,7 @@ def heal_auth():
     try:
         subprocess.run(["python3", str(ENFORCE_SCRIPT)], check=True, cwd=str(SENTINEL_DIR))
         log_healing("Auth Repair complete. Restarting gateway...")
-        subprocess.run(["pkill", "-f", "openclaw gateway"], check=False)
+        subprocess.run(["pkill", "-f", claw_env.GATEWAY_PROC_PATTERN], check=False)
     except Exception as e:
         log_healing(f"Auth Repair FAILED: {e}")
 
@@ -50,24 +81,25 @@ def heal_connection():
     """Resolve gateway connection failures."""
     log_healing("Initiating Connection Repair (Gatekeeper reset)...")
     try:
-        subprocess.run(["pkill", "-9", "-f", "openclaw gateway"], check=False)
+        subprocess.run(["pkill", "-9", "-f", claw_env.GATEWAY_PROC_PATTERN], check=False)
         log_healing("Connection Repair complete. Sentinel loop will restart.")
     except Exception as e:
         log_healing(f"Connection Repair FAILED: {e}")
 
 def monitor_loop():
     """Tails the gateway log and triggers healing protocols."""
-    HEALING_LOG.parent.mkdir(parents=True, exist_ok=True)
     log_healing("Mission 006: Autonomic Self-Healing ACTIVE.")
 
-    if not GATEWAY_LOG.exists():
-        logging.info(f"Waiting for gateway log at {GATEWAY_LOG}...")
-        while not GATEWAY_LOG.exists():
+    log_path = gateway_log()
+    if log_path is None:
+        logging.info(f"Waiting for gateway log in {SENTINEL_DIR / 'logs'}...")
+        while log_path is None:
             time.sleep(2)
+            log_path = gateway_log()
 
-    logging.info(f"Monitoring logs for failure patterns...")
-    
-    with open(GATEWAY_LOG, "r") as f:
+    logging.info(f"Monitoring {log_path} for failure patterns...")
+
+    with open(log_path, "r") as f:
         # Seek to end
         f.seek(0, os.SEEK_END)
         

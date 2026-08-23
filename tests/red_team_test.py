@@ -7,8 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from sentinel.command_auditor import CommandAuditor
-from sentinel_main import load_constitution
+from src.sentinel.command_auditor import CommandAuditor
+from src.sentinel.main import load_constitution
 
 
 def main() -> None:

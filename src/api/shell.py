@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 
-from sentinel_main import SentinelRuntime
+from src.sentinel.main import SentinelRuntime
 
 
 def main() -> None:

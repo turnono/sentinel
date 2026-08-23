@@ -4,13 +4,14 @@ import json
 import logging
 import signal
 import subprocess
+import sys
 from pathlib import Path
 from datetime import datetime
 
-# Configuration
-LOG_DIR = Path("/tmp/openclaw")
-CONFIG_PATH = Path.home() / ".openclaw" / "openclaw.json"
-RESTART_FLAG = Path("/tmp/openclaw_restart_requested")
+# The monitors run as scripts, not as a package, so the repo root is not
+# on sys.path by default.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import claw_env
 
 # Error Patterns to Trigger Failover
 QUOTA_ERRORS = [
@@ -34,9 +35,9 @@ logging.basicConfig(
 )
 
 def get_latest_log_file():
-    """Find the most recent OpenClaw log file."""
+    """Find the most recent gateway log file, under either spelling."""
     try:
-        logs = list(LOG_DIR.glob("openclaw-*.log"))
+        logs = claw_env.gateway_logs()
         if not logs:
             return None
         # Sort by modification time
@@ -45,13 +46,22 @@ def get_latest_log_file():
         return None
 
 def rotate_model():
-    """Update openclaw.json to the next model in rotation."""
-    if not CONFIG_PATH.exists():
-        logging.error("Config file not found!")
+    """Update the gateway config to the next model in rotation."""
+    config_path = claw_env.config_path()
+    if not config_path.exists():
+        logging.error(f"Config file not found: {config_path}")
         return False
-        
+
+    if config_path.suffix == ".toml":
+        logging.error(
+            f"{config_path} is TOML but this monitor only reads JSON. "
+            "Pin the JSON install with CLAW_BRAND, or port the reader to TOML. "
+            "Skipping rotation."
+        )
+        return False
+
     try:
-        with open(CONFIG_PATH, "r") as f:
+        with open(config_path, "r") as f:
             config = json.load(f)
             
         current_model = config.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")
@@ -75,7 +85,7 @@ def rotate_model():
         
         config["agents"]["defaults"]["model"]["primary"] = next_model
         
-        with open(CONFIG_PATH, "w") as f:
+        with open(config_path, "w") as f:
             json.dump(config, f, indent=2)
             
         return next_model
@@ -85,9 +95,9 @@ def rotate_model():
         return False
 
 def trigger_restart():
-    """Signal Sentinel to restart OpenClaw."""
+    """Signal Sentinel to restart the gateway."""
     logging.info("🚨 Triggering OpenClaw Restart...")
-    RESTART_FLAG.touch()
+    claw_env.restart_flag().touch()
     
     # Kill the OpenClaw Gateway process to force the restart loop
     try:
@@ -95,7 +105,7 @@ def trigger_restart():
         # Using pkill is simplest for 'node' running 'openclaw' script
         # But 'openclaw' might be the process name if compiled binary
         # Let's try flexible pkill
-        subprocess.run(["pkill", "-f", "openclaw gateway"], check=False)
+        subprocess.run(["pkill", "-f", claw_env.GATEWAY_PROC_PATTERN], check=False)
         logging.info("Sent kill signal to OpenClaw Gateway.")
     except Exception as e:
         logging.error(f"Failed to kill process: {e}")

@@ -2,7 +2,14 @@ import asyncio
 import json
 import logging
 import subprocess
+import sys
 import time
+from pathlib import Path
+
+# The monitors run as scripts, not as a package, so the repo root is not
+# on sys.path by default.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import claw_env
 
 # Configure logging
 logging.basicConfig(
@@ -11,8 +18,8 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-# OpenClaw CLI Path
-OPENCLAW_CLI = "/opt/homebrew/bin/openclaw"
+# Resolved at import: Homebrew prefix and binary name both vary.
+CLAW_CLI = claw_env.cli_path()
 
 # Alert thresholds
 ALERT_THRESHOLD_PERCENT = 90
@@ -33,13 +40,13 @@ def send_notification(title, message, sound="Basso"):
 
 async def monitor():
     global last_alert_time
-    logging.info(f"Starting Context Monitor using CLI: {OPENCLAW_CLI}")
+    logging.info(f"Starting Context Monitor using CLI: {CLAW_CLI}")
     
     while True:
         try:
-            # Run openclaw sessions --json
+            # Run `<cli> sessions --json`
             result = subprocess.run(
-                [OPENCLAW_CLI, "sessions", "--json"],
+                [CLAW_CLI, "sessions", "--json"],
                 capture_output=True,
                 text=True,
                 check=False 
